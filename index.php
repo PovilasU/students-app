@@ -7,6 +7,23 @@ initApplicationsTable();
 
 $pdo = getPDO();
 
+// handle submit action
+if (isset($_GET['action'], $_GET['id']) && $_GET['action'] === 'submit') {
+    $id = (int)$_GET['id'];
+
+    if ($id > 0) {
+        $stmt = $pdo->prepare("
+            UPDATE applications
+            SET status = 'submitted'
+            WHERE id = :id AND status = 'draft'
+        ");
+        $stmt->execute([':id' => $id]);
+    }
+
+    header('Location: index.php');
+    exit;
+}
+
 $error = null;
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
@@ -107,6 +124,7 @@ $applications = $applicationsStmt->fetchAll(PDO::FETCH_ASSOC);
                     <th>Tipas</th>
                     <th>Statusas</th>
                     <th>Sukurta</th>
+                    <th>Veiksmai</th>
                 </tr>
             </thead>
             <tbody>
@@ -117,6 +135,15 @@ $applications = $applicationsStmt->fetchAll(PDO::FETCH_ASSOC);
                     <td><?php echo htmlspecialchars($app['type']); ?></td>
                     <td><?php echo htmlspecialchars($app['status']); ?></td>
                     <td><?php echo htmlspecialchars($app['created_at']); ?></td>
+                    <td>
+                        <?php if ($app['status'] === 'draft'): ?>
+                            <a href="index.php?action=submit&id=<?php echo (int)$app['id']; ?>">
+                                Pateikti
+                            </a>
+                        <?php else: ?>
+                            -
+                        <?php endif; ?>
+                    </td>
                 </tr>
             <?php endforeach; ?>
             </tbody>
