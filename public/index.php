@@ -29,45 +29,37 @@ if ($currentUser === null) {
 $flashError = $_SESSION['flash_error'] ?? null;
 unset($_SESSION['flash_error']);
 
-// student submit with max 3 submitted per type
-if (
-    isset($_GET['action'], $_GET['id']) &&
-    $_GET['action'] === 'submit' &&
-    $currentUser['role'] === 'student'
-) {
-    $id = (int)$_GET['id'];
-
-    if ($id > 0) {
-        $error = $service->submitDraftForStudent($id, (int)$currentUser['id']);
-        if ($error !== null) {
-            $_SESSION['flash_error'] = $error;
-        }
-    }
-
-    header('Location: index.php');
-    exit;
-}
-
-// admin approve only
-if (
-    isset($_GET['action'], $_GET['id']) &&
-    $currentUser['role'] === 'admin' &&
-    $_GET['action'] === 'approve'
-) {
-    $id = (int)$_GET['id'];
-
-    if ($id > 0) {
-        $service->approveSubmittedByAdmin($id);
-    }
-
-    header('Location: index.php');
-    exit;
-}
+$route = $_GET['route'] ?? 'applications';
+$method = $_SERVER['REQUEST_METHOD'];
 
 $error = null;
 
-// create new application (student only)
-if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+if ($route === 'applications/submit' && $method === 'GET') {
+    if ($currentUser['role'] === 'student') {
+        $id = (int)($_GET['id'] ?? 0);
+        if ($id > 0) {
+            $err = $service->submitDraftForStudent($id, (int)$currentUser['id']);
+            if ($err !== null) {
+                $_SESSION['flash_error'] = $err;
+            }
+        }
+    }
+    header('Location: index.php?route=applications');
+    exit;
+}
+
+if ($route === 'applications/approve' && $method === 'GET') {
+    if ($currentUser['role'] === 'admin') {
+        $id = (int)($_GET['id'] ?? 0);
+        if ($id > 0) {
+            $service->approveSubmittedByAdmin($id);
+        }
+    }
+    header('Location: index.php?route=applications');
+    exit;
+}
+
+if ($route === 'applications' && $method === 'POST') {
     if ($currentUser['role'] !== 'student') {
         $error = 'Only students can create applications.';
     } else {
@@ -80,13 +72,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if ($result !== null) {
             $error = $result;
         } else {
-            header('Location: index.php');
+            header('Location: index.php?route=applications');
             exit;
         }
     }
 }
 
-$applications = $service->getApplicationsForUser($currentUser);
+if ($route === 'applications' && $method === 'GET') {
+    $applications = $service->getApplicationsForUser($currentUser);
+} else {
+    // simple 404 for now
+    http_response_code(404);
+    echo 'Page not found';
+    exit;
+}
 ?>
 <!DOCTYPE html>
 <html lang="lt">
@@ -114,7 +113,7 @@ $applications = $service->getApplicationsForUser($currentUser);
             <p style="color: red;"><?php echo htmlspecialchars($error); ?></p>
         <?php endif; ?>
 
-        <form method="post">
+        <form method="post" action="index.php?route=applications">
             <div>
                 <label>
                     Pavadinimas:
@@ -177,9 +176,9 @@ $applications = $service->getApplicationsForUser($currentUser);
                         <?php if ($currentUser['role'] === 'student' && $app['status'] === 'draft'): ?>
                             <a href="edit_application.php?id=<?php echo (int)$app['id']; ?>">Redaguoti</a>
                             |
-                            <a href="index.php?action=submit&id=<?php echo (int)$app['id']; ?>">Pateikti</a>
+                            <a href="index.php?route=applications/submit&id=<?php echo (int)$app['id']; ?>">Pateikti</a>
                         <?php elseif ($currentUser['role'] === 'admin' && $app['status'] === 'submitted'): ?>
-                            <a href="index.php?action=approve&id=<?php echo (int)$app['id']; ?>">Patvirtinti</a>
+                            <a href="index.php?route=applications/approve&id=<?php echo (int)$app['id']; ?>">Patvirtinti</a>
                             |
                             <a href="reject_application.php?id=<?php echo (int)$app['id']; ?>">Atmesti</a>
                         <?php else: ?>
