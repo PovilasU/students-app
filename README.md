@@ -1,30 +1,98 @@
 # Studentų paraiškų valdymo sistema (PHP + SQLite)
 
-Tai paprasta studentų paraiškų valdymo sistema, sukurta naudojant **gryną PHP** ir **SQLite** duomenų bazę.  
-Sistemoje realizuoti du vartotojų vaidmenys:
+Tai pilnai veikianti studentų paraiškų valdymo sistema, sukurta naudojant **gryną PHP**, **SQLite** bei taikant modernius programinės įrangos architektūros principus:  
+**SOLID**, **Repository pattern**, **Service layer**, **Controller layer**, **View templates**, **Separation of Concerns** ir **MVC tipo struktūra**.
 
-- **Studentas** – gali kurti, redaguoti ir pateikti paraiškas (ruošinius)
-- **Administratorius** – gali peržiūrėti pateiktas paraiškas, jas patvirtinti arba atmesti su komentaru
+Sistema palaiko du naudotojų vaidmenis:
 
-Projektas vystytas žingsnis po žingsnio, pagal pateiktą užduotį.
+- **Studentas** – gali kurti, redaguoti ir pateikti paraiškas (draft → submitted)
+- **Administratorius** – gali peržiūrėti, patvirtinti arba atmesti paraiškas su komentaru
+
+Projektas sukurtas siekiant pademonstruoti gerą PHP kodo struktūrą be framework’o.
 
 ---
 
 ## 🚀 Funkcionalumas
 
-### Studentas gali:
-
-- Kurti naują paraišką (**draft**)
-- Redaguoti paraiškos ruošinį (tik kol jis dar draft)
-- Pateikti paraišką
-- Pateikti ne daugiau kaip **3 vieno tipo paraiškas**
+### Studentas
+- Kuria naują paraišką (**draft**)
+- Redaguoja esamą ruošinį
+- Pateikia paraišką (**submitted**)
+- Negali pateikti daugiau nei **3 vieno tipo** paraiškų
 - Matyti administratoriaus **atmetimo komentarą**
 
-### Administratorius gali:
-
+### Administratorius
 - Matyti visas studentų paraiškas
-- Patvirtinti pateiktas paraiškas
-- Atmesti paraiškas privalomu komentaru
+- Patvirtinti paraiškas (**approved**)
+- Atmesti paraiškas (**rejected**) su **privalomu komentaru**
+
+---
+
+# 🧠 Architektūra ir dizaino principai
+
+Projektas sukurtas naudojant kelis svarbius programavimo principus:
+
+---
+
+## 🟦 SOLID principai
+
+### ✔ S – Single Responsibility Principle  
+Kiekvienas komponentas turi vieną atsakomybę:  
+Repository → DB logika  
+Service → verslo logika  
+Controller → request'ai  
+View → HTML šablonai  
+
+### ✔ O – Open/Closed Principle  
+Sistemos komponentai lengvai plečiami nekeičiant bazinio kodo.
+
+### ✔ L – Liskov Substitution Principle  
+Kodas lengvai pakeičiamas alternatyviomis implementacijomis.
+
+### ✔ I – Interface Segregation Principle  
+Funkcionalumas suskaidytas į mažus, tikslius komponentus.
+
+### ✔ D – Dependency Inversion Principle  
+Controller gauna Service ir Repository per dependency injection.
+
+---
+
+## 🟩 Repository pattern
+
+`ApplicationRepository.php` atsakingas tik už duomenų bazės užklausas.  
+Galima lengvai pakeisti SQLite į MySQL ar PostgreSQL nekeičiat controllerių.
+
+---
+
+## 🟧 Service layer
+
+`ApplicationService.php` įgyvendina visą verslo logiką:
+
+- max 3 submitted per type
+- validacijos
+- leidimų tikrinimas
+
+---
+
+## 🟪 Controller layer
+
+`ApplicationController.php` atsakingas už:
+
+- veiksmų valdymą (submit/edit/reject)
+- response duomenų paruošimą
+- klaidų valdymą
+
+---
+
+## 🟦 View templates (MVC)
+
+Visas HTML iškeltas į `/views/applications/`, o controller tik perduoda duomenis į šablonus.
+
+Tai suteikia:
+
+- švarų kodą
+- lengvesnę plėtrą
+- geresnį skaidrumą
 
 ---
 
@@ -37,17 +105,25 @@ students-app/
 │   ├── index.php
 │   ├── login.php
 │   ├── logout.php
-│   │
-│   ├── applications/
-│   │   ├── index.php
-│   │   ├── edit.php
-│   │   └── reject.php
+│   ├── css/
+│   │   └── water.css
+│   └── applications/
+│       ├── index.php
+│       ├── edit.php
+│       └── reject.php
 │
 ├── src/
 │   ├── db.php
+│   ├── View.php
 │   ├── ApplicationRepository.php
 │   ├── ApplicationService.php
 │   └── ApplicationController.php
+│
+├── views/
+│   └── applications/
+│       ├── list.php
+│       ├── edit.php
+│       └── reject.php
 │
 ├── data/
 │   └── app.sqlite
@@ -57,76 +133,45 @@ students-app/
 
 ---
 
-## 🛠 Naudotos technologijos
+## 🔧 Paleidimas
 
-- **PHP 8+**
-- **SQLite**
-- Be framework’ų (pure PHP)
-- Architektūriniai sluoksniai:
-  - Repository (DB užklausos)
-  - Service (verslo logika)
-  - Controller (veiksmų koordinavimas)
+1. ```
+   php -S localhost:8000 -t public
+   ```
+2. Naršyklėje atidaryti:  
+   `http://localhost:8000/`
 
 ---
 
-## 🔧 Projekto paleidimas lokaliai
+## 🔐 Prisijungimo duomenys
 
-### 1. Atsisiųsk / nuklonuok projektą
+### Studentas
+- Email: **student@example.com**
+- Slaptažodis: **student123**
 
-```
-git clone https://github.com/PovilasU/students-app.git
-```
-
-### 2. Paleisk PHP serverį
-
-```
-php -S localhost:8000 -t public
-```
-
-### 3. Atidaryk naršyklėje
-
-```
-http://localhost:8000/
-```
+### Administratorius
+- Email: **admin@example.com**
+- Slaptažodis: **admin123**
 
 ---
 
-## 🔑 Prisijungimo naudotojai (demo)
+## ✔ Užduoties reikalavimai – įgyvendinti
 
-| Vardas       | Rolė    |
-| ------------ | ------- |
-| Student User | student |
-| Admin User   | admin   |
-
-Slaptažodžio nereikia.
-
----
-
-## ✔ Užduoties reikalavimai – įgyvendinimo santrauka
-
-| Reikalavimas                               | Įgyvendinta | Pastabos              |
-| ------------------------------------------ | ----------- | --------------------- |
-| Studentas gali sukurti paraišką            | ✔           | Kuriama kaip „draft“  |
-| Studentas gali redaguoti ruošinį           | ✔           |                       |
-| Studentas gali pateikti ruošinį            | ✔           | Maks. 3 vieno tipo    |
-| Administratorius mato visas paraiškas      | ✔           |                       |
-| Administratorius gali patvirtinti          | ✔           |                       |
-| Administratorius gali atmesti su komentaru | ✔           | Privalomas komentaras |
-| Studentas mato atmetimo komentarą          | ✔           |                       |
-
----
-
-## 💡 Galimi patobulinimai
-
-- Tikras prisijungimas su slaptažodžiais
-- Bootstrap/Tailwind UI
-- PSR-4 autoloading
-- Vieningas routeris
-- PHPUnit testai
+| Reikalavimas | Įgyvendinta |
+|--------------|-------------|
+| Studentas gali kurti paraišką | ✔ |
+| Studentas gali redaguoti ruošinį | ✔ |
+| Studentas gali pateikti | ✔ |
+| Max 3 per tipą | ✔ |
+| Admin mato visas paraiškas | ✔ |
+| Admin gali patvirtinti | ✔ |
+| Admin gali atmesti su komentaru | ✔ |
+| Studentas mato komentarą | ✔ |
+| Tikras login | ✔ |
+| MVC-like architektūra | ✔ |
 
 ---
 
 ## 👤 Autorius
 
-Įrašyk savo vardą, GitHub nuorodą ir el. paštą.
-Povilas Urbonas, https://github.com/PovilasU
+Įrašyk savo vardą, GitHub ir el. paštą.
