@@ -1,6 +1,6 @@
 # Studentų Paraiškų Valdymo Sistema (PHP + SQLite)
 
-Ši sistema yra pilnai funkcionuojanti studentų paraiškų valdymo aplikacija, sukurta naudojant **gryną PHP**, **SQLite**, **Repository + Service architektūrą**, **View šablonus**, dalinį **routerį**, ir įdiegtas modernias **saugumo priemones** (CSRF, XSS apsauga, login rate limiting, SQL injection prevencija).
+Ši sistema yra pilnai funkcionuojanti studentų paraiškų valdymo aplikacija, sukurta naudojant **gryną PHP**, **SQLite**, aiškią **Controller → Service → Repository → View** architektūrą, paprastą **REST API sluoksnį** (`/api/...`) ir įdiegtas **saugumo priemones** (CSRF, XSS, login rate limiting, SQL injection prevencija).
 
 ---
 
@@ -25,165 +25,284 @@
 
 ---
 
-## 🏗️ 2. Architektūra
+## 🏗️ 2. Architektūra (sluoksniai)
 
-Projektas naudoja aiškią sluoksninę architektūrą:
+Projekto backend dalis suskaidyta į aiškius sluoksnius:
 
-```
-public/ (endpoint'ai)
-    → Controller (ApplicationController)
-        → Service (ApplicationService)
-            → Repository (ApplicationRepository)
-                → DB (SQLite per PDO)
-views/
-    → HTML šablonai
+```text
+public/ (entrypoint'ai ir API)
+   ├─ applications/*.php   (HTML endpoint'ai)
+   ├─ api/*.php            (REST API endpoint'ai)
+   └─ index.php            (paprastas router'is /login, /register)
+
+Controller (ApplicationController)
+   ↓
+Service (ApplicationService)
+   ↓
+Repository (ApplicationRepository)
+   ↓
+DB (SQLite per PDO, db.php)
+
+View (views/*.php) – HTML šablonai
 ```
 
 ### Controller
 
-- Apdoroja HTTP užklausas
-- Kviesčia Service metodus
-- Renka duomenis View šablonams
+Failas: `src/ApplicationController.php`
+
+- priima duomenis iš `public/applications/*.php`,
+- kviečia `ApplicationService`,
+- paruošia duomenis `View` šablonams (`views/applications/*.php`).
 
 ### Service
 
-- Verslo taisyklės:
-  - „max 3 submitted per tipo“
-  - statusų keitimas
-  - atmetimo logika
-  - rate limiting ruošinių kūrimui
-- Nežino apie HTML ar SQL
+Failas: `src/ApplicationService.php`
+
+- verslo taisyklės:
+  - „max 3 submitted per tipo“,
+  - statusų keitimas `draft → submitted → approved / rejected`,
+  - atmetimo komentaro validacija,
+  - „draft“ redagavimo teisės,
+  - paprastas rate limiting ruošinių kūrimui;
+- nežino apie HTML ar HTTP – todėl lengvai testuojamas.
 
 ### Repository
 
-- Visi SQL užklausų metodai vienoje vietoje
-- PDO `prepare` apsauga nuo SQL injection
+Failas: `src/ApplicationRepository.php`
+
+- kapsuliuoja SQL užklausas:
+  - `findAllForStudent`, `findAll`, `findById`,
+  - `countSubmittedByTypeForStudent`,
+  - `insertDraft`, `updateDraft`,
+  - `updateStatus`, `updateStatusAndComment`,
+  - `countRecentDraftsForStudent`;
+- naudoja `PDO::prepare` / `execute` (apsauga nuo SQL injection).
 
 ### View
 
-- HTML šablonai be „verslo logikos“
-- Naudojamas `htmlspecialchars` (XSS apsauga)
+Katalogai:
+
+- `views/auth/*.php` – login / registracija,
+- `views/applications/*.php` – paraiškų sąrašas, redagavimas, atmetimas.
+
+Visas HTML atskirtas nuo verslo logikos.
 
 ---
 
-## 🧩 3. Naudoti Design Pattern'ai
+## 🪄 3. SOLID principai
+
+### SRP (Single Responsibility Principle)
+
+- Controller – tik request → service → view srautas,
+- Service – tik verslo taisyklės,
+- Repository – tik SQL prieiga,
+- View – tik HTML atvaizdavimas.
+
+### DIP (Dependency Inversion Principle)
+
+- `ApplicationController` gauna `ApplicationService` per konstruktorių,
+- `ApplicationService` gauna `ApplicationRepository`,
+- `ApplicationRepository` gauna `PDO`.
+
+Taip lengviau keisti implementacijas (pvz., kitą DB) ir testuoti.
+
+Kiti principai (OCP, LSP, ISP) – išplaukia iš šio atsakomybės atskyrimo: sluoksniai nėra per daug „protingi“ ir nedubliuoja funkcionalumo.
+
+---
+
+## 🧩 4. Naudoti design pattern'ai
 
 ### Repository Pattern
 
-Failas: `src/ApplicationRepository.php`
+**Kur:** `src/ApplicationRepository.php`  
+**Kodėl:**
 
-- SQL atsieta nuo verslo logikos
-- Lengvai testuojama
-- Galima pakeisti DB (SQLite → MySQL ir t. t.)
+- aiškus duomenų prieigos sluoksnis,
+- galima pakeisti SQLite į kitą DB be pokyčių Controller/Service sluoksniuose,
+- palengvina unit testų rašymą.
 
 ### Service Layer Pattern
 
-Failas: `src/ApplicationService.php`
+**Kur:** `src/ApplicationService.php`  
+**Kodėl:**
 
-- Visi verslo sprendimai vienoje vietoje
-- Testuojama izoliuotai su in-memory SQLite
-- Controlleris išlieka „plonas“
+- visos taisyklės (max 3 paraiškos per tipą, statusų keitimas, komentaro validacija) vienoje vietoje;
+- Controller neturi verslo logikos – jis tik perduoda duomenis į Service.
 
-### Partial Router Pattern
+### Paprastas Routing Pattern
 
-Failas: `public/index.php`
+**Kur:** `public/index.php` + `src/Router.php`
 
-- `/login` ir `/register` nukreipiami per paprastą Router klasę
-- Paraiškų dalis (`/applications/index.php`) šiuo metu realizuota klasikiniu entrypoint, bet lengvai pritaikoma routeriui ateityje
+- `/login` ir `/register` nukreipiami per vieną router’į,
+- paraiškų dalis (`/applications`) kol kas naudoja klasikinius entrypoint’us (`public/applications/*.php`).
 
 ---
 
-## 🔐 4. Saugumo sprendimai
+## 🔐 5. Saugumo sprendimai
 
-### ✔ SQL Injection apsauga
+### 5.1. SQL Injection apsauga
 
-- Naudojami tik ruošiami statement'ai (`prepare` + `execute`)
-- `PDO::ATTR_EMULATE_PREPARES = false`
-- Visi kintamieji paduodami kaip parametrai (`:id`, `:student_id`, `:email`, ...)
+- Visi užklausų parametrai paduodami per `PDO::prepare()` / `execute()`:
+  - nenaudojama stringų konkatenacija `"... WHERE id=$id"`,
+  - naudojami placeholder’iai `:id`, `:student_id`, `:email` ir t. t.
+- `PDO::ATTR_EMULATE_PREPARES = false` – naudojami tik tikri prepared statements.
 
-### ✔ XSS apsauga
+### 5.2. XSS apsauga
 
-- Absoliučiai visi HTML dinaminiai laukeliai pereina per:
-  ```php
-  htmlspecialchars($value, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8')
-  ```
+Visose view:
 
-### ✔ CSRF apsauga
+```php
+htmlspecialchars($value, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8')
+```
+
+Taip vartotojo įvestas tekstas nėra vykdomas kaip HTML/JS naršyklėje.
+
+### 5.3. CSRF apsauga
 
 Failas: `src/csrf.php`
 
-- Kiekviena POST forma turi `csrf_token`:
-  ```html
-  <input type="hidden" name="csrf_token" value="<?php echo csrf_token(); ?>" />
-  ```
-- Serveris tikrina žetoną prieš apdorojant duomenis:
-  ```php
-  if (!csrf_verify($_POST['csrf_token'] ?? null)) { ... }
-  ```
+Kiekviena POST forma:
 
-### ✔ Login Rate Limiting
+```html
+<input type="hidden" name="csrf_token" value="<?php echo csrf_token(); ?>" />
+```
 
-- Po 5 nesėkmingų bandymų login blokavimo langas (pvz. 5 minutės)
-- Sumažina bruteforce riziką
+Serverio pusėje tikrinama:
 
-### ✔ Session Hardening
+```php
+if (!csrf_verify($_POST['csrf_token'] ?? null)) {
+    // klaida
+}
+```
 
-- `session_regenerate_id(true)` po sėkmingo prisijungimo
-- Sumažina session fixation riziką
+### 5.4. Login rate limiting
 
-### ✔ Spam apsauga (ruošinių kūrimui)
+- Po kelių nesėkmingų bandymų (pvz. 5) – login blokavimas tam tikram laikui,
+- sumažina bruteforce atakų riziką.
 
-- Studentas negali sukurti daugiau nei 5 ruošinių per 60 sekundžių
-- Apskaita daroma `ApplicationRepository::countRecentDraftsForStudent(...)` ir tikrinama `ApplicationService::createDraftForStudent(...)`
+### 5.5. Sesijų apsauga
+
+- `session_regenerate_id(true)` po sėkmingo prisijungimo,
+- sumažina session fixation riziką.
+
+### 5.6. Spam apsauga
+
+- `ApplicationRepository::countRecentDraftsForStudent(...)` + `ApplicationService::createDraftForStudent(...)`:
+  - neleidžia sukurti per daug ruošinių per trumpą laiką (pvz. >5 per 60 sekundžių).
 
 ---
 
-## 🧪 5. Unit testai (PHPUnit)
+## 🧪 6. Unit testai (PHPUnit)
 
-Testai tikrina:
+Testai yra suskirstyti:
 
-- Ruošinio kūrimo validaciją
-- „max 3 submitted“ taisyklę vienam tipui
-- Ruošinio pateikimą (`draft → submitted`)
-- Patvirtinimą (`submitted → approved`)
-- Atmetimą su komentaru (`submitted → rejected` + įrašomas komentaras)
-- Atmetimo klaidą, jei komentaras tuščias
-- Spam aptikimą (rate limiting ruošinių kūrimui)
-- Ignoravimą, kai bandoma patvirtinti ne „submitted“ paraišką
+### 6.1. Verslo logikos testai
 
-### Kaip paleisti testus:
+Failas: `tests/ApplicationServiceTest.php`
+
+Tikrina:
+
+- ruošinio kūrimą (`createDraftForStudent`) + validaciją,
+- max 3 `submitted` paraiškas vieno tipo studentui,
+- pateikimą `draft → submitted`,
+- draudimą pateikti kito studento paraišką,
+- patvirtinimą `submitted → approved` (tik `submitted` keičiasi),
+- atmetimą `submitted → rejected` su komentaru,
+- klaidą, kai atmetimo komentaras tuščias,
+- ruošinių rate limit (per daug bandymų per minutę).
+
+Naudojama in-memory SQLite (`sqlite::memory:`), kad testai neapkrautų realios DB.
+
+### 6.2. REST API testai
+
+Papildomi unit/integraciniai testai API logikai (pvz. `tests/ApiLoginTest.php`, `tests/ApiApplicationsApiTest.php`) tikrina:
+
+- `/api/login` – sėkminga ir nesėkminga autentifikacija,
+- `/api/applications` – sąrašo gavimą prisijungus,
+- `/api/applications` – ruošinio sukūrimą per JSON,
+- `/api/applications` – klaidą, jei neautentifikuota.
+
+(API sluoksnis testuojamas per helper funkcijas, kurios grąžina [status, body] be HTTP header’io priklausomybės.)
+
+### Testų paleidimas
 
 ```bash
 composer install
 vendor/bin/phpunit
 ```
 
-Tikėtinas rezultatas, pvz.:
+Tikėtinas rezultatas:
 
 ```text
-OK (10 tests, 31 assertions)
+OK (10+ tests, 30+ assertions)
 ```
 
 ---
 
-## 🌐 6. Paprastas REST API sluoksnis (`/api/...`)
+## 🌐 7. Pilnas REST API (`/api/...`)
 
-Projektas turi minimalų REST API sluoksnį paraiškų darbo demonstravimui.
+REST API sluoksnis leidžia dirbti su sistema be HTML – per JSON.
 
-### Failas: `public/api/applications.php`
+### 7.1. `/api/login` – prisijungimas (POST)
 
-Pagrindiniai endpoint'ai:
-
-#### 1) Gauti paraiškų sąrašą (studentui – jo, adminui – visas)
+Failas: `public/api/login.php`  
+Logika: `src/ApiLogin.php` (`api_login_handle()` funkcija).
 
 **Request:**
 
 ```http
-GET /api/applications.php
+POST /api/login HTTP/1.1
+Host: localhost:8000
+Content-Type: application/json
+
+{
+  "email": "student@example.com",
+  "password": "student123"
+}
+```
+
+**Atsakymas (200 OK):**
+
+```json
+{
+  "success": true,
+  "user": {
+    "id": 2,
+    "name": "Student User",
+    "role": "student"
+  }
+}
+```
+
+Nesėkmės atveju – `401` ir:
+
+```json
+{
+  "success": false,
+  "error": "Neteisingas el. paštas arba slaptažodis."
+}
+```
+
+Sesija (`PHPSESSID`) nustatoma taip pat, kaip ir HTML login.
+
+---
+
+### 7.2. `/api/applications` – sąrašas ir kūrimas
+
+Failas: `public/api/applications.php`  
+Logika: `src/ApiApplications.php` (`api_applications_handle()`).
+
+**GET /api/applications**
+
+- jei prisijungęs studentas – grąžina JO paraiškas,
+- jei prisijungęs adminas – grąžina VISAS paraiškas.
+
+```http
+GET /api/applications HTTP/1.1
 Cookie: PHPSESSID=...
 ```
 
-**Atsakymas (200 OK, JSON):**
+**Atsakymas (200 OK):**
 
 ```json
 [
@@ -200,12 +319,45 @@ Cookie: PHPSESSID=...
 ]
 ```
 
-#### 2) Sukurti naują ruošinį (studento API)
+Jeigu neautentifikuota – `401` su JSON klaida.
 
-**Request:**
+---
+
+**GET /api/applications?id={id}**
+
+Gauti vieną paraišką.
+
+- studentas gali matyti tik savo paraiškas,
+- adminas gali matyti bet kurią.
 
 ```http
-POST /api/applications.php
+GET /api/applications?id=1
+Cookie: PHPSESSID=...
+```
+
+**Atsakymas (200 OK):**
+
+```json
+{
+  "id": 1,
+  "student_id": 2,
+  "title": "Test paraiška",
+  "description": "Aprašymas",
+  "type": "Stipendija",
+  "status": "submitted",
+  "rejection_comment": null,
+  "created_at": "2025-11-28 12:00:00"
+}
+```
+
+Jei nerandama – `404`.
+
+---
+
+**POST /api/applications** – sukurti ruošinį (tik studentui)
+
+```http
+POST /api/applications HTTP/1.1
 Content-Type: application/json
 Cookie: PHPSESSID=...
 
@@ -225,9 +377,7 @@ Cookie: PHPSESSID=...
 }
 ```
 
-#### 3) Klaidos pavyzdys
-
-Jei viršytas ruošinių rate limit:
+Jei verslo taisyklė grąžina klaidą (pvz. per daug ruošinių) – `400`:
 
 ```json
 {
@@ -236,24 +386,144 @@ Jei viršytas ruošinių rate limit:
 }
 ```
 
-> API sluoksnis naudoja tą patį `ApplicationRepository` ir `ApplicationService`, todėl verslo logika nesidubliuoja, tik pasikeičia atvaizdavimo forma (HTML → JSON).
+---
+
+### 7.3. Statuso keitimas per API (submit/approve/reject)
+
+Tam naudojamas **PATCH** metodas su `action` lauku.
+
+**Submit (studentas)**
+
+```http
+PATCH /api/applications?id=1 HTTP/1.1
+Content-Type: application/json
+Cookie: PHPSESSID=... (studento sesija)
+
+{
+  "action": "submit"
+}
+```
+
+**Atsakymas (200 OK):**
+
+```json
+{
+  "success": true,
+  "message": "Paraiška sėkmingai pateikta."
+}
+```
 
 ---
 
-## 📁 7. Projekto struktūra
+**Approve (adminas)**
+
+```http
+PATCH /api/applications?id=1 HTTP/1.1
+Content-Type: application/json
+Cookie: PHPSESSID=... (admino sesija)
+
+{
+  "action": "approve"
+}
+```
+
+---
+
+**Reject (adminas)**
+
+```http
+PATCH /api/applications?id=1 HTTP/1.1
+Content-Type: application/json
+Cookie: PHPSESSID=... (admino sesija)
+
+{
+  "action": "reject",
+  "comment": "Netinkami duomenys"
+}
+```
+
+**Atsakymas (200 OK):**
+
+```json
+{
+  "success": true,
+  "message": "Paraiška atmesta.",
+  "comment": "Netinkami duomenys"
+}
+```
+
+Jei komentaras tuščias – `400`, su klaidos žinute iš Service.
+
+---
+
+## 🧪 8. Kaip pačiam patestuoti REST API
+
+### 8.1. Paleisk serverį
+
+```bash
+php -S localhost:8000 -t public
+```
+
+### 8.2. Testavimas su `curl`
+
+1. **Login studentu (gausi cookie)**
+
+```bash
+curl -i -c cookies.txt   -H "Content-Type: application/json"   -d '{"email":"student@example.com","password":"student123"}'   http://localhost:8000/api/login
+```
+
+2. **Sukurti paraišką per API**
+
+```bash
+curl -i -b cookies.txt   -H "Content-Type: application/json"   -d '{"title":"API Paraiška","description":"Aprašymas","type":"Stipendija"}'   http://localhost:8000/api/applications
+```
+
+3. **Gauti sąrašą**
+
+```bash
+curl -i -b cookies.txt http://localhost:8000/api/applications
+```
+
+4. **Pateikti paraišką (submit)**
+
+```bash
+curl -i -b cookies.txt   -X PATCH   -H "Content-Type: application/json"   -d '{"action":"submit"}'   "http://localhost:8000/api/applications?id=1"
+```
+
+5. **Login adminu ir patvirtinti**
+
+```bash
+curl -i -c admin_cookies.txt   -H "Content-Type: application/json"   -d '{"email":"admin@example.com","password":"admin123"}'   http://localhost:8000/api/login
+
+curl -i -b admin_cookies.txt   -X PATCH   -H "Content-Type: application/json"   -d '{"action":"approve"}'   "http://localhost:8000/api/applications?id=1"
+```
+
+### 8.3. Testavimas su Postman / Thunder Client
+
+1. Sukurk **POST** request į `/api/login` su JSON body (email/password).
+2. Išsaugok cookie (Postman tai daro automatiškai).
+3. Sukurk naujus request’us:
+   - GET `/api/applications`
+   - POST `/api/applications`
+   - PATCH `/api/applications?id=...` su atitinkamu body.
+
+---
+
+## 📁 9. Projekto struktūra (su API)
 
 ```text
 students-app/
 │
 ├── public/
-│   ├── index.php           # dalinis routeris (/login, /register)
-│   ├── login.php           # legacy login įėjimo taškas
-│   ├── register.php        # legacy registracija
+│   ├── index.php
+│   ├── login.php          # legacy
+│   ├── register.php       # legacy
 │   ├── logout.php
 │   ├── api/
-│   │   └── applications.php  # paprastas REST API
+│   │   ├── login.php
+│   │   └── applications.php
 │   ├── applications/
-│   │   ├── index.php       # pagrindinis paraiškų HTML endpoint'as
+│   │   ├── index.php
 │   │   ├── edit.php
 │   │   └── reject.php
 │   └── css/
@@ -263,10 +533,12 @@ students-app/
 │   ├── db.php
 │   ├── View.php
 │   ├── csrf.php
-│   ├── Router.php          # paprastas Router login/registracijai
+│   ├── Router.php
 │   ├── ApplicationRepository.php
 │   ├── ApplicationService.php
 │   ├── ApplicationController.php
+│   ├── ApiLogin.php            # API login logika
+│   └── ApiApplications.php     # API applications logika
 │
 ├── views/
 │   ├── auth/
@@ -279,6 +551,8 @@ students-app/
 │
 ├── tests/
 │   ├── ApplicationServiceTest.php
+│   ├── ApiLoginTest.php
+│   ├── ApiApplicationsApiTest.php
 │   └── bootstrap.php
 │
 ├── data/
@@ -288,47 +562,6 @@ students-app/
 ├── phpunit.xml
 └── README.md
 ```
-
----
-
-## ▶️ 8. Paleidimas lokaliai
-
-### 1. Įdiegti priklausomybes
-
-```bash
-composer install
-```
-
-### 2. Paleisti serverį
-
-```bash
-php -S localhost:8000 -t public
-```
-
-### 3. Atidaryti naršyklėje
-
-```text
-http://localhost:8000/
-```
-
-### 4. Numatyti vartotojai:
-
-| Rolė      | El. paštas          | Slaptažodis |
-| --------- | ------------------- | ----------- |
-| Studentas | student@example.com | student123  |
-| Adminas   | admin@example.com   | admin123    |
-
----
-
-## 🚀 9. Ką daryčiau kitaip, jei turėčiau daugiau laiko
-
-- Pilnas Router (front controller architektūra) visiems route'ams (`/applications` ir pan.)
-- PSR-4 autoloading (Composer autoload vietoje `require`)
-- State Pattern paraiškų būsenoms (`draft/submitted/approved/rejected` kaip atskiri objektai)
-- Pilnai išbaigtas REST API (`/api/login`, `/api/applications/{id}`, ir t. t.)
-- Docker konteinerizacija (PHP + SQLite + web serveris vienam komplekte)
-- Papildomi integraciniai testai UI ir API sluoksniui
-- Modernus UI (Bootstrap/Tailwind) – nors pagal užduotį dizainas nėra vertinamas
 
 ---
 

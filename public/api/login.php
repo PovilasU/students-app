@@ -5,11 +5,10 @@ session_start();
 
 header('Content-Type: application/json; charset=utf-8');
 
-require __DIR__ . '/../../src/ApiApplications.php';
+require __DIR__ . '/../../src/ApiLogin.php';
 
-[$status, $body] = api_applications_handle(
+[$status, $body] = api_login_handle(
     $_SERVER['REQUEST_METHOD'],
-    $_GET,
     file_get_contents('php://input') ?: null
 );
 
