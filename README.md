@@ -257,12 +257,8 @@ http://localhost:8000/
 
 ## 👤 10. Autorius
 
-Įrašykite savo duomenis:
-
-- **Vardas Pavardė**
-  Povilas Urbonas
+- **Povilas Urbonas**
 - **El. paštas**
-- **GitHub profilis**
-  https://github.com/PovilasU
+- **GitHub profilis https://github.com/PovilasU**
 
 ---
