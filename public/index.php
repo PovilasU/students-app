@@ -2,12 +2,16 @@
 session_start();
 
 require __DIR__ . '/../src/db.php';
+require __DIR__ . '/../src/ApplicationRepository.php';
+require __DIR__ . '/../src/ApplicationService.php';
 
 initDatabase();
 initUsersTable();
 initApplicationsTable();
 
 $pdo = getPDO();
+$repository = new ApplicationRepository($pdo);
+$service = new ApplicationService($repository);
 
 if (!isset($_SESSION['user_id'])) {
     header('Location: login.php');
@@ -34,45 +38,9 @@ if (
     $id = (int)$_GET['id'];
 
     if ($id > 0) {
-        $stmt = $pdo->prepare("
-            SELECT id, type
-            FROM applications
-            WHERE id = :id
-              AND student_id = :student_id
-              AND status = 'draft'
-        ");
-        $stmt->execute([
-            ':id' => $id,
-            ':student_id' => $currentUser['id'],
-        ]);
-        $app = $stmt->fetch(PDO::FETCH_ASSOC);
-
-        if ($app) {
-            $countStmt = $pdo->prepare("
-                SELECT COUNT(*)
-                FROM applications
-                WHERE student_id = :student_id
-                  AND type = :type
-                  AND status = 'submitted'
-            ");
-            $countStmt->execute([
-                ':student_id' => $currentUser['id'],
-                ':type' => $app['type'],
-            ]);
-            $submittedCount = (int)$countStmt->fetchColumn();
-
-            if ($submittedCount >= 3) {
-                $_SESSION['flash_error'] = 'Jau turite 3 pateiktas šio tipo paraiškas.';
-            } else {
-                $updateStmt = $pdo->prepare("
-                    UPDATE applications
-                    SET status = 'submitted'
-                    WHERE id = :id
-                ");
-                $updateStmt->execute([
-                    ':id' => $id,
-                ]);
-            }
+        $error = $service->submitDraftForStudent($id, (int)$currentUser['id']);
+        if ($error !== null) {
+            $_SESSION['flash_error'] = $error;
         }
     }
 
@@ -89,15 +57,7 @@ if (
     $id = (int)$_GET['id'];
 
     if ($id > 0) {
-        $stmt = $pdo->prepare("
-            UPDATE applications
-            SET status = 'approved'
-            WHERE id = :id
-              AND status = 'submitted'
-        ");
-        $stmt->execute([
-            ':id' => $id,
-        ]);
+        $service->approveSubmittedByAdmin($id);
     }
 
     header('Location: index.php');
@@ -115,46 +75,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $description = trim($_POST['description'] ?? '');
         $type = trim($_POST['type'] ?? '');
 
-        if ($title === '' || $description === '' || $type === '') {
-            $error = 'Please fill all fields.';
+        $result = $service->createDraftForStudent((int)$currentUser['id'], $title, $description, $type);
+
+        if ($result !== null) {
+            $error = $result;
         } else {
-            $stmt = $pdo->prepare("
-                INSERT INTO applications (student_id, title, description, type, status, created_at)
-                VALUES (:student_id, :title, :description, :type, :status, :created_at)
-            ");
-
-            $stmt->execute([
-                ':student_id' => $currentUser['id'],
-                ':title' => $title,
-                ':description' => $description,
-                ':type' => $type,
-                ':status' => 'draft',
-                ':created_at' => date('Y-m-d H:i:s'),
-            ]);
-
             header('Location: index.php');
             exit;
         }
     }
 }
 
-// load applications list
-if ($currentUser['role'] === 'student') {
-    $applicationsStmt = $pdo->prepare("
-        SELECT id, title, type, status, created_at, rejection_comment
-        FROM applications
-        WHERE student_id = :student_id
-        ORDER BY created_at DESC
-    ");
-    $applicationsStmt->execute([':student_id' => $currentUser['id']]);
-} else {
-    $applicationsStmt = $pdo->query("
-        SELECT id, title, type, status, created_at, rejection_comment
-        FROM applications
-        ORDER BY created_at DESC
-    ");
-}
-$applications = $applicationsStmt->fetchAll(PDO::FETCH_ASSOC);
+$applications = $service->getApplicationsForUser($currentUser);
 ?>
 <!DOCTYPE html>
 <html lang="lt">
