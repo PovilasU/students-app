@@ -37,32 +37,45 @@ function initUsersTable(): void
 {
     $pdo = getPDO();
 
+    // Create table with email + password_hash
     $sql = "
         CREATE TABLE IF NOT EXISTS users (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             name TEXT NOT NULL,
+            email TEXT NOT NULL UNIQUE,
+            password_hash TEXT NOT NULL,
             role TEXT NOT NULL
         )
     ";
-
     $pdo->exec($sql);
 
+    // Check if empty
     $count = (int)$pdo->query("SELECT COUNT(*) FROM users")->fetchColumn();
 
     if ($count === 0) {
-        $stmt = $pdo->prepare("INSERT INTO users (name, role) VALUES (:name, :role)");
+        $stmt = $pdo->prepare("
+            INSERT INTO users (name, email, password_hash, role)
+            VALUES (:name, :email, :password_hash, :role)
+        ");
 
+        // Student User
         $stmt->execute([
             ':name' => 'Student User',
+            ':email' => 'student@example.com',
+            ':password_hash' => password_hash('student123', PASSWORD_DEFAULT),
             ':role' => 'student',
         ]);
 
+        // Admin User
         $stmt->execute([
             ':name' => 'Admin User',
+            ':email' => 'admin@example.com',
+            ':password_hash' => password_hash('admin123', PASSWORD_DEFAULT),
             ':role' => 'admin',
         ]);
     }
 }
+
 
 function initApplicationsTable(): void
 {

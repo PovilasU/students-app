@@ -7,21 +7,29 @@ initDatabase();
 initUsersTable();
 initApplicationsTable();
 
-$users = getAllUsers();
 $error = null;
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    $userId = (int)($_POST['user_id'] ?? 0);
+    $email = trim($_POST['email'] ?? '');
+    $password = $_POST['password'] ?? '';
 
-    if ($userId <= 0) {
-        $error = 'Please select a user.';
+    if ($email === '' || $password === '') {
+        $error = 'Įveskite el. paštą ir slaptažodį.';
     } else {
-        $user = findUserById($userId);
+        $pdo = getPDO();
 
-        if ($user === null) {
-            $error = 'User not found.';
+        $stmt = $pdo->prepare("
+            SELECT id, name, email, password_hash, role
+            FROM users
+            WHERE email = :email
+        ");
+        $stmt->execute([':email' => $email]);
+        $user = $stmt->fetch(PDO::FETCH_ASSOC);
+
+        if (!$user || !password_verify($password, $user['password_hash'])) {
+            $error = 'Neteisingas el. paštas arba slaptažodis.';
         } else {
-           $_SESSION['user_id'] = $user['id'];
+            $_SESSION['user_id'] = $user['id'];
             header('Location: applications/index.php');
             exit;
         }
@@ -32,10 +40,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 <html lang="lt">
 <head>
     <meta charset="UTF-8">
-    <title>Login - Paraiškų sistema</title>
+    <title>Prisijungimas - Paraiškų sistema</title>
+    <link rel="stylesheet" href="css/water.css">
 </head>
 <body>
-    <h1>Paraiškų sistema - Login</h1>
+    <h1>Paraiškų sistema - prisijungimas</h1>
 
     <?php if ($error !== null): ?>
         <p style="color: red;"><?php echo htmlspecialchars($error); ?></p>
@@ -44,20 +53,27 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     <form method="post">
         <div>
             <label>
-                Vartotojas:
-                <select name="user_id" required>
-                    <option value="">-- Pasirinkite --</option>
-                    <?php foreach ($users as $user): ?>
-                        <option value="<?php echo (int)$user['id']; ?>">
-                            <?php echo htmlspecialchars($user['name'] . ' (' . $user['role'] . ')'); ?>
-                        </option>
-                    <?php endforeach; ?>
-                </select>
+                El. paštas:
+                <input type="email" name="email" required>
+            </label>
+        </div>
+        <div>
+            <label>
+                Slaptažodis:
+                <input type="password" name="password" required>
             </label>
         </div>
         <div>
             <button type="submit">Prisijungti</button>
         </div>
     </form>
+
+    <hr>
+
+    <h2>Demo prisijungimai</h2>
+    <ul>
+        <li>Studentas: <code>student@example.com</code> / <code>student123</code></li>
+        <li>Administratorius: <code>admin@example.com</code> / <code>admin123</code></li>
+    </ul>
 </body>
 </html>
