@@ -22,7 +22,7 @@ if ($currentUser === null) {
     exit;
 }
 
-// submit action
+// student submit
 if (
     isset($_GET['action'], $_GET['id']) &&
     $_GET['action'] === 'submit' &&
@@ -41,6 +41,33 @@ if (
         $stmt->execute([
             ':id' => $id,
             ':student_id' => $currentUser['id'],
+        ]);
+    }
+
+    header('Location: index.php');
+    exit;
+}
+
+// admin approve/reject
+if (
+    isset($_GET['action'], $_GET['id']) &&
+    $currentUser['role'] === 'admin'
+) {
+    $id = (int)$_GET['id'];
+    $action = $_GET['action'];
+
+    if ($id > 0 && in_array($action, ['approve', 'reject'], true)) {
+        $newStatus = $action === 'approve' ? 'approved' : 'rejected';
+
+        $stmt = $pdo->prepare("
+            UPDATE applications
+            SET status = :status
+            WHERE id = :id
+              AND status = 'submitted'
+        ");
+        $stmt->execute([
+            ':status' => $newStatus,
+            ':id' => $id,
         ]);
     }
 
@@ -187,6 +214,10 @@ $applications = $applicationsStmt->fetchAll(PDO::FETCH_ASSOC);
                             <a href="index.php?action=submit&id=<?php echo (int)$app['id']; ?>">
                                 Pateikti
                             </a>
+                        <?php elseif ($currentUser['role'] === 'admin' && $app['status'] === 'submitted'): ?>
+                            <a href="index.php?action=approve&id=<?php echo (int)$app['id']; ?>">Patvirtinti</a>
+                            |
+                            <a href="index.php?action=reject&id=<?php echo (int)$app['id']; ?>">Atmesti</a>
                         <?php else: ?>
                             -
                         <?php endif; ?>
