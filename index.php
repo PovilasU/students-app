@@ -1,21 +1,46 @@
 <?php
+
 require __DIR__ . '/db.php';
 
-// Inicializuojam DB lenteles
-initDatabase();           // mūsų test lentelė
-initApplicationsTable();  // nauja paraiškų lentelė
+initDatabase();
+initApplicationsTable();
 
 $pdo = getPDO();
 
-// DB testui – vis dar paliekam (skaičius kils kas reload)
+$error = null;
+
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    $title = trim($_POST['title'] ?? '');
+    $description = trim($_POST['description'] ?? '');
+    $type = trim($_POST['type'] ?? '');
+
+    if ($title === '' || $description === '' || $type === '') {
+        $error = 'Please fill all fields.';
+    } else {
+        $stmt = $pdo->prepare("
+            INSERT INTO applications (title, description, type, status, created_at)
+            VALUES (:title, :description, :type, :status, :created_at)
+        ");
+
+        $stmt->execute([
+            ':title' => $title,
+            ':description' => $description,
+            ':type' => $type,
+            ':status' => 'draft',
+            ':created_at' => date('Y-m-d H:i:s'),
+        ]);
+
+        header('Location: index.php');
+        exit;
+    }
+}
+
 $stmt = $pdo->prepare("INSERT INTO test (created_at) VALUES (:created_at)");
 $stmt->execute([
     ':created_at' => date('Y-m-d H:i:s'),
 ]);
-
 $testCount = (int)$pdo->query("SELECT COUNT(*) FROM test")->fetchColumn();
 
-// Pasiimam visas paraiškas (kol kas lentelė bus tuščia)
 $applicationsStmt = $pdo->query("
     SELECT id, title, type, status, created_at
     FROM applications
@@ -27,11 +52,42 @@ $applications = $applicationsStmt->fetchAll(PDO::FETCH_ASSOC);
 <html lang="lt">
 <head>
     <meta charset="UTF-8">
-    <title>Paraiškų sistema - Hello</title>
+    <title>Paraiškų sistema</title>
 </head>
 <body>
     <h1>Paraiškų sistema</h1>
-    <p>Šita bus mūsų paraiškų sistemos pradžia.</p>
+
+    <h2>Nauja paraiška</h2>
+
+    <?php if ($error !== null): ?>
+        <p style="color: red;"><?php echo htmlspecialchars($error); ?></p>
+    <?php endif; ?>
+
+    <form method="post">
+        <div>
+            <label>
+                Pavadinimas:
+                <input type="text" name="title" required>
+            </label>
+        </div>
+        <div>
+            <label>
+                Tipas:
+                <input type="text" name="type" required>
+            </label>
+        </div>
+        <div>
+            <label>
+                Aprašymas:<br>
+                <textarea name="description" rows="4" cols="40" required></textarea>
+            </label>
+        </div>
+        <div>
+            <button type="submit">Sukurti paraišką (draft)</button>
+        </div>
+    </form>
+
+    <hr>
 
     <h2>DB statusas</h2>
     <p>Test lentelėje įrašų: <strong><?php echo $testCount; ?></strong></p>
