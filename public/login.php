@@ -67,6 +67,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             <button type="submit">Prisijungti</button>
         </div>
     </form>
+    
+    <p>
+        Neturite paskyros?
+        <a href="register.php">Registruokitės</a>
+    </p>
+
 
     <hr>
 
