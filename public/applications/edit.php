@@ -1,13 +1,9 @@
 <?php
 session_start();
 
-// debug for dev
-ini_set('display_errors', '1');
-error_reporting(E_ALL);
-
-require __DIR__ . '/../src/db.php';
-require __DIR__ . '/../src/ApplicationRepository.php';
-require __DIR__ . '/../src/ApplicationService.php';
+require __DIR__ . '/../../src/db.php';
+require __DIR__ . '/../../src/ApplicationRepository.php';
+require __DIR__ . '/../../src/ApplicationService.php';
 
 initDatabase();
 initUsersTable();
@@ -18,7 +14,7 @@ $repository = new ApplicationRepository($pdo);
 $service = new ApplicationService($repository);
 
 if (!isset($_SESSION['user_id'])) {
-    header('Location: login.php');
+    header('Location: ../login.php');
     exit;
 }
 
@@ -31,14 +27,13 @@ if ($currentUser === null || $currentUser['role'] !== 'student') {
 
 $id = (int)($_GET['id'] ?? 0);
 if ($id <= 0) {
-    echo 'Invalid application id.';
+    header('Location: index.php');
     exit;
 }
 
 $application = $service->getDraftForEditing($id, (int)$currentUser['id']);
-
 if (!$application) {
-    echo 'Application not found or not editable (must be your draft).';
+    header('Location: index.php');
     exit;
 }
 
@@ -61,6 +56,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         header('Location: index.php');
         exit;
     }
+
+    $application['title'] = $title;
+    $application['description'] = $description;
+    $application['type'] = $type;
 }
 ?>
 <!DOCTYPE html>
@@ -76,7 +75,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         Prisijungęs: <strong><?php echo htmlspecialchars($currentUser['name']); ?></strong>
         (<?php echo htmlspecialchars($currentUser['role']); ?>)
         | <a href="index.php">Atgal į sąrašą</a>
-        | <a href="logout.php">Atsijungti</a>
+        | <a href="../logout.php">Atsijungti</a>
     </p>
 
     <?php if ($error !== null): ?>

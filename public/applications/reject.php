@@ -1,9 +1,9 @@
 <?php
 session_start();
 
-require __DIR__ . '/../src/db.php';
-require __DIR__ . '/../src/ApplicationRepository.php';
-require __DIR__ . '/../src/ApplicationService.php';
+require __DIR__ . '/../../src/db.php';
+require __DIR__ . '/../../src/ApplicationRepository.php';
+require __DIR__ . '/../../src/ApplicationService.php';
 
 initDatabase();
 initUsersTable();
@@ -14,7 +14,7 @@ $repository = new ApplicationRepository($pdo);
 $service = new ApplicationService($repository);
 
 if (!isset($_SESSION['user_id'])) {
-    header('Location: login.php');
+    header('Location: ../login.php');
     exit;
 }
 
@@ -63,7 +63,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         Prisijungęs: <strong><?php echo htmlspecialchars($currentUser['name']); ?></strong>
         (<?php echo htmlspecialchars($currentUser['role']); ?>)
         | <a href="index.php">Atgal į sąrašą</a>
-        | <a href="logout.php">Atsijungti</a>
+        | <a href="../logout.php">Atsijungti</a>
     </p>
 
     <h2>Paraiška</h2>

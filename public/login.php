@@ -21,8 +21,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if ($user === null) {
             $error = 'User not found.';
         } else {
-            $_SESSION['user_id'] = $user['id'];
-            header('Location: index.php');
+           $_SESSION['user_id'] = $user['id'];
+            header('Location: applications/index.php');
             exit;
         }
     }
