@@ -1,6 +1,6 @@
 <?php
 
-require __DIR__ . '/db.php';
+require __DIR__ . '/../src/db.php';
 
 initDatabase();
 initApplicationsTable();
