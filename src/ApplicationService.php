@@ -2,88 +2,154 @@
 
 class ApplicationService
 {
-    private ApplicationRepository $repository;
-
-    public function __construct(ApplicationRepository $repository)
+    public function __construct(private ApplicationRepository $repository)
     {
-        $this->repository = $repository;
+    }
+
+    public function createDraftForStudent(
+        int $studentId,
+        string $title,
+        string $description,
+        string $type
+    ): ?string {
+        $title = trim($title);
+        $description = trim($description);
+        $type = trim($type);
+
+        if ($title === '' || $description === '' || $type === '') {
+            return 'Visi laukai yra privalomi.';
+        }
+
+        if ($this->repository->countRecentDraftsForStudent($studentId, 60) >= 5) {
+            return 'Per daug bandymų sukurti paraiškas. Palaukite minutę ir bandykite vėl.';
+        }
+
+        $this->repository->insertDraft($studentId, $title, $description, $type);
+
+        return null;
     }
 
     public function submitDraftForStudent(int $id, int $studentId): ?string
     {
-        $app = $this->repository->findDraftForStudent($id, $studentId);
+        $app = $this->repository->findById($id);
+
         if (!$app) {
-            return null;
+            return 'Paraiška nerasta.';
         }
 
-        $submittedCount = $this->repository->countSubmittedByTypeForStudent($studentId, $app['type']);
-        if ($submittedCount >= 3) {
+        if ((int)$app['student_id'] !== $studentId) {
+            return 'Negalite pateikti kito studento paraiškos.';
+        }
+
+        if ($app['status'] !== 'draft') {
+            return 'Pateikti galima tik ruošinio būsenos paraiškas.';
+        }
+
+        $count = $this->repository->countSubmittedByTypeForStudent($studentId, $app['type']);
+        if ($count >= 3) {
             return 'Jau turite 3 pateiktas šio tipo paraiškas.';
         }
 
-        $this->repository->submitDraft($app['id']);
-        return null;
-    }
-
-    public function createDraftForStudent(int $studentId, string $title, string $description, string $type): ?string
-    {
-        if ($title === '' || $description === '' || $type === '') {
-            return 'Please fill all fields.';
-        }
-
-        $this->repository->createDraft($studentId, $title, $description, $type);
-        return null;
-    }
-
-    public function getDraftForEditing(int $id, int $studentId): ?array
-    {
-        return $this->repository->findDraftForStudent($id, $studentId);
-    }
-
-    public function updateDraftForStudent(int $id, int $studentId, string $title, string $description, string $type): ?string
-    {
-        if ($title === '' || $description === '' || $type === '') {
-            return 'Please fill all fields.';
-        }
-
-        $ok = $this->repository->updateDraft($id, $studentId, $title, $description, $type);
-        if (!$ok) {
-            return 'Application not found or not editable.';
-        }
+        $this->repository->updateStatus($id, 'submitted');
 
         return null;
     }
 
     public function approveSubmittedByAdmin(int $id): void
     {
-        $this->repository->approveSubmitted($id);
-    }
+        $app = $this->repository->findById($id);
+        if (!$app) {
+            return;
+        }
 
-    public function getSubmittedForRejection(int $id): ?array
-    {
-        return $this->repository->findSubmittedById($id);
+        if ($app['status'] !== 'submitted') {
+            return;
+        }
+
+        $this->repository->updateStatus($id, 'approved');
     }
 
     public function rejectWithComment(int $id, string $comment): ?string
     {
+        $comment = trim($comment);
         if ($comment === '') {
-            return 'Please enter rejection comment.';
+            return 'Prašome įrašyti atmetimo komentarą.';
         }
 
-        $ok = $this->repository->rejectSubmittedWithComment($id, $comment);
-        if (!$ok) {
-            return 'Application not found or not in submitted state.';
+        $app = $this->repository->findById($id);
+        if (!$app) {
+            return 'Paraiška nerasta.';
         }
+
+        if ($app['status'] !== 'submitted') {
+            return 'Atmesti galima tik pateiktas paraiškas.';
+        }
+
+        $this->repository->updateStatusAndComment($id, 'rejected', $comment);
 
         return null;
     }
 
-    public function getApplicationsForUser(array $currentUser): array
+    public function getApplicationsForUser(array $user): array
     {
-        if ($currentUser['role'] === 'student') {
-            return $this->repository->getStudentApplications((int)$currentUser['id']);
+        if ($user['role'] === 'student') {
+            return $this->repository->findAllForStudent((int)$user['id']);
         }
 
-        return $this->repository->getAllApplications();
+        return $this->repository->findAll();
+    }
+
+    public function getApplicationForEdit(int $id, array $user): ?array
+    {
+        $app = $this->repository->findById($id);
+        if (!$app) {
+            return null;
+        }
+
+        if ($user['role'] !== 'student' || (int)$app['student_id'] !== (int)$user['id']) {
+            return null;
+        }
+
+        if ($app['status'] !== 'draft') {
+            return null;
+        }
+
+        return $app;
+    }
+
+    public function updateDraftForStudent(
+        int $id,
+        array $user,
+        string $title,
+        string $description,
+        string $type
+    ): ?string {
+        $app = $this->getApplicationForEdit($id, $user);
+        if (!$app) {
+            return 'Negalite redaguoti šios paraiškos.';
+        }
+
+        $title = trim($title);
+        $description = trim($description);
+        $type = trim($type);
+
+        if ($title === '' || $description === '' || $type === '') {
+            return 'Visi laukai yra privalomi.';
+        }
+
+        $this->repository->updateDraft($id, $title, $description, $type);
+
+        return null;
+    }
+
+    public function getApplicationForAdmin(int $id): ?array
+    {
+        $app = $this->repository->findById($id);
+
+        if (!$app) {
+            return null;
+        }
+
+        return $app;
     }
 }

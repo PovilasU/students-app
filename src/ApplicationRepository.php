@@ -2,66 +2,40 @@
 
 class ApplicationRepository
 {
-    private PDO $pdo;
-
-    public function __construct(PDO $pdo)
+    public function __construct(private PDO $pdo)
     {
-        $this->pdo = $pdo;
     }
 
-    public function findDraftForStudent(int $id, int $studentId): ?array
+    public function findAllForStudent(int $studentId): array
     {
         $stmt = $this->pdo->prepare("
-            SELECT id, student_id, title, description, type, status, created_at, rejection_comment
+            SELECT *
             FROM applications
-            WHERE id = :id
-              AND student_id = :student_id
-              AND status = 'draft'
+            WHERE student_id = :sid
+            ORDER BY created_at DESC
         ");
-        $stmt->execute([
-            ':id' => $id,
-            ':student_id' => $studentId,
-        ]);
+        $stmt->execute([':sid' => $studentId]);
 
-        $row = $stmt->fetch(PDO::FETCH_ASSOC);
-        return $row ?: null;
+        return $stmt->fetchAll();
     }
 
-    public function countSubmittedByTypeForStudent(int $studentId, string $type): int
+    public function findAll(): array
     {
-        $stmt = $this->pdo->prepare("
-            SELECT COUNT(*)
-            FROM applications
-            WHERE student_id = :student_id
-              AND type = :type
-              AND status = 'submitted'
+        $stmt = $this->pdo->query("
+            SELECT a.*, u.name AS student_name
+            FROM applications a
+            JOIN users u ON a.student_id = u.id
+            ORDER BY a.created_at DESC
         ");
-        $stmt->execute([
-            ':student_id' => $studentId,
-            ':type' => $type,
-        ]);
 
-        return (int)$stmt->fetchColumn();
+        return $stmt->fetchAll();
     }
 
-    public function submitDraft(int $id): void
-    {
-        $stmt = $this->pdo->prepare("
-            UPDATE applications
-            SET status = 'submitted'
-            WHERE id = :id
-              AND status = 'draft'
-        ");
-        $stmt->execute([
-            ':id' => $id,
-        ]);
-    }
-
-    public function createDraft(int $studentId, string $title, string $description, string $type): void
+    public function insertDraft(int $studentId, string $title, string $description, string $type): void
     {
         $stmt = $this->pdo->prepare("
             INSERT INTO applications (student_id, title, description, type, status, created_at)
-            VALUES (:student_id, :title, :description, :type, :status, :created_at)
+            VALUES (:student_id, :title, :description, :type, 'draft', :created_at)
         ");
 
         $stmt->execute([
@@ -69,12 +43,24 @@ class ApplicationRepository
             ':title' => $title,
             ':description' => $description,
             ':type' => $type,
-            ':status' => 'draft',
             ':created_at' => date('Y-m-d H:i:s'),
         ]);
     }
 
-    public function updateDraft(int $id, int $studentId, string $title, string $description, string $type): bool
+    public function findById(int $id): ?array
+    {
+        $stmt = $this->pdo->prepare("
+            SELECT *
+            FROM applications
+            WHERE id = :id
+        ");
+        $stmt->execute([':id' => $id]);
+        $row = $stmt->fetch();
+
+        return $row ?: null;
+    }
+
+    public function updateDraft(int $id, string $title, string $description, string $type): void
     {
         $stmt = $this->pdo->prepare("
             UPDATE applications
@@ -82,86 +68,74 @@ class ApplicationRepository
                 description = :description,
                 type = :type
             WHERE id = :id
-              AND student_id = :student_id
-              AND status = 'draft'
         ");
 
         $stmt->execute([
+            ':id' => $id,
             ':title' => $title,
             ':description' => $description,
             ':type' => $type,
-            ':id' => $id,
-            ':student_id' => $studentId,
         ]);
-
-        return $stmt->rowCount() > 0;
     }
 
-    public function getStudentApplications(int $studentId): array
+    public function countSubmittedByTypeForStudent(int $studentId, string $type): int
     {
         $stmt = $this->pdo->prepare("
-            SELECT id, title, type, status, created_at, rejection_comment
+            SELECT COUNT(*)
             FROM applications
-            WHERE student_id = :student_id
-            ORDER BY created_at DESC
-        ");
-        $stmt->execute([':student_id' => $studentId]);
-
-        return $stmt->fetchAll(PDO::FETCH_ASSOC);
-    }
-
-    public function getAllApplications(): array
-    {
-        $stmt = $this->pdo->query("
-            SELECT id, title, type, status, created_at, rejection_comment
-            FROM applications
-            ORDER BY created_at DESC
-        ");
-
-        return $stmt->fetchAll(PDO::FETCH_ASSOC);
-    }
-
-    public function approveSubmitted(int $id): void
-    {
-        $stmt = $this->pdo->prepare("
-            UPDATE applications
-            SET status = 'approved'
-            WHERE id = :id
+            WHERE student_id = :sid
+              AND type = :type
               AND status = 'submitted'
         ");
         $stmt->execute([
-            ':id' => $id,
+            ':sid' => $studentId,
+            ':type' => $type,
         ]);
+
+        return (int)$stmt->fetchColumn();
     }
 
-    public function findSubmittedById(int $id): ?array
-    {
-        $stmt = $this->pdo->prepare("
-            SELECT id, student_id, title, description, type, status, created_at, rejection_comment
-            FROM applications
-            WHERE id = :id
-              AND status = 'submitted'
-        ");
-        $stmt->execute([':id' => $id]);
-
-        $row = $stmt->fetch(PDO::FETCH_ASSOC);
-        return $row ?: null;
-    }
-
-    public function rejectSubmittedWithComment(int $id, string $comment): bool
+    public function updateStatus(int $id, string $status): void
     {
         $stmt = $this->pdo->prepare("
             UPDATE applications
-            SET status = 'rejected',
+            SET status = :status
+            WHERE id = :id
+        ");
+        $stmt->execute([
+            ':id' => $id,
+            ':status' => $status,
+        ]);
+    }
+
+    public function updateStatusAndComment(int $id, string $status, string $comment): void
+    {
+        $stmt = $this->pdo->prepare("
+            UPDATE applications
+            SET status = :status,
                 rejection_comment = :comment
             WHERE id = :id
-              AND status = 'submitted'
         ");
         $stmt->execute([
-            ':comment' => $comment,
             ':id' => $id,
+            ':status' => $status,
+            ':comment' => $comment,
+        ]);
+    }
+
+    public function countRecentDraftsForStudent(int $studentId, int $seconds): int
+    {
+        $stmt = $this->pdo->prepare("
+            SELECT COUNT(*)
+            FROM applications
+            WHERE student_id = :sid
+              AND created_at >= :since
+        ");
+        $stmt->execute([
+            ':sid' => $studentId,
+            ':since' => date('Y-m-d H:i:s', time() - $seconds),
         ]);
 
-        return $stmt->rowCount() > 0;
+        return (int)$stmt->fetchColumn();
     }
 }

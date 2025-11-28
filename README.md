@@ -1,250 +1,394 @@
 # Studentų paraiškų valdymo sistema (PHP + SQLite)
 
-Šis projektas yra pilnai funkcionuojanti studentų paraiškų valdymo sistema, sukurta naudojant **gryną PHP**, **SQLite** ir aiškią **sluoksninę architektūrą**, vadovaujantis **SOLID** principais bei naudojant **design pattern’us** (Repository, Service, MVC-like).
+Šis projektas yra pilnai funkcionuojanti studentų paraiškų valdymo sistema, sukurta naudojant **gryną PHP**, **SQLite**, aiškią **sluoksninę architektūrą** ir papildytas **saugumo mechanizmais** (PDO, CSRF, rate limiting, XSS prevencija, sesijų apsauga).
 
-README struktūruotas taip, kad būtų lengva pristatyti projektą darbdaviui ir paaiškinti techninius sprendimus.
+README parengtas taip, kad galėtum juo remtis pristatydamas projektą darbdaviui.
 
 ---
 
-# 🔷 1. Projekto architektūra
+## 1. Funkcionalumas
 
-Projektas sukurtas laikantis aiškaus sluoksnių suskirstymo:
+### Studentas gali:
 
+- Registruotis sistemoje
+- Prisijungti su el. paštu ir slaptažodžiu
+- Kurti naujas paraiškas (**ruošiniai**)
+- Redaguoti ruošinius
+- Pateikti paraiškas (**pateikta**)
+- Negali pateikti daugiau kaip **3 vieno tipo pateiktų paraiškų**
+- Matyti administratoriaus atmetimo komentarus (**atmestos paraiškos**)
+
+### Administratorius gali:
+
+- Prisijungti
+- Peržiūrėti visas paraiškas
+- Patvirtinti paraiškas (**patvirtinta**)
+- Atmesti paraiškas su **privalomu komentaru**
+
+---
+
+## 2. Architektūra (Controller → Service → Repository + View)
+
+Projektas suskirstytas į aiškius sluoksnius:
+
+```text
+public/ (entry points)
+  → Controller (ApplicationController)
+    → Service (ApplicationService)
+      → Repository (ApplicationRepository)
+        → DB (SQLite per PDO)
+
+            ↓
+
+          View (HTML šablonai views/)
 ```
-Controller → Service → Repository → Database
-                    ↓
-                  View
-```
 
-## ✔ Controller sluoksnis
+### Controller sluoksnis
 
-Failas: `src/ApplicationController.php`  
-Atsakingas už:
+Failas: `src/ApplicationController.php`
 
-- HTTP užklausų apdorojimą
-- `Service` sluoksnio kvietimą
-- duomenų perdavimą į `View`
+- priima duomenis iš `public/applications/*.php`
+- kviečia `ApplicationService`
+- paruošia duomenis `View` šablonams
 
-Pvz.:  
-`ApplicationController::submit()` – kviečia `ApplicationService::submitDraftForStudent()`.
+Pavyzdys: `ApplicationController::submit()` kviečia `ApplicationService::submitDraftForStudent()`.
 
----
+### Service sluoksnis
 
-## ✔ Service sluoksnis
+Failas: `src/ApplicationService.php`
 
-Failas: `src/ApplicationService.php`  
-Atsakingas už verslo logiką:
+- įgyvendina verslo taisykles:
+  - „max 3 submitted per tipo“
+  - ar studentas gali redaguoti konkretų ruošinį
+  - statusų keitimą (`draft` → `submitted` → `approved/rejected`)
+- atskirtas nuo DB – dirba per `ApplicationRepository`.
 
-- taisyklė „**max 3 submitted per paraiškų tipą**“
-- leidimų tikrinimas (studentas redaguoja tik savo draft)
-- statusų keitimai (submitted → approved / rejected)
-- validacijos
+### Repository sluoksnis
 
-Pvz. metodai:
+Failas: `src/ApplicationRepository.php`
 
-- `createDraftForStudent()`
-- `submitDraftForStudent()`
-- `approveSubmittedByAdmin()`
-- `rejectWithComment()`
+- kapsuliuoja SQL užklausas:
+  - `findById`
+  - `findAllForStudent`
+  - `findAll`
+  - `countSubmittedByTypeForStudent`
+  - `updateStatus`
+  - `updateStatusAndComment`
+  - `countRecentDraftsForStudent`
+- naudojamas PDO `prepare/execute` (saugiau už `query` su kintamaisiais).
 
----
+### View sluoksnis
 
-## ✔ Repository sluoksnis
+Katalogas: `views/applications/`
 
-Failas: `src/ApplicationRepository.php`  
-Atsakingas už duomenų bazės operacijas:
+- `list.php` – sąrašas + forma naujai paraiškai
+- `edit.php` – ruošinio redagavimas
+- `reject.php` – atmetimo forma
 
-- `countSubmittedByTypeForStudent()`
-- `updateStatus()`
-- `findDraftForStudent()`
-- `rejectSubmittedWithComment()`
-
-Tai leidžia pakeisti DB (pvz. MySQL) nekeičiant logikos.
+HTML atskirtas nuo logikos (Controller/Service neturi HTML).
 
 ---
 
-## ✔ View sluoksnis
+## 3. SOLID principai
 
-Katalogas: `views/applications/`  
-Failai:
+### SRP – Single Responsibility Principle
 
-- `list.php`
-- `edit.php`
-- `reject.php`
+Kiekvienas sluoksnis turi vieną atsakomybę:
 
-Čia gyvena tik HTML – nėra jokios verslo logikos.
+- Controller – request‘ų valdymas
+- Service – verslo taisyklės
+- Repository – duomenų prieiga
+- View – atvaizdavimas (HTML)
+
+### DIP – Dependency Inversion Principle
+
+Priklausomybės tiekiamos per konstruktorių:
+
+- `ApplicationController` gauna `ApplicationService`
+- `ApplicationService` gauna `ApplicationRepository`
+- `ApplicationRepository` gauna `PDO`
+
+Tai leidžia lengvai keisti implementacijas (pvz., testuose naudoti in-memory SQLite).
+
+Kiti SOLID principai (OCP, LSP, ISP) išplaukia iš tokio atsakomybių atskyrimo – sluoksniai nėra „perkrauti“ funkcionalumu.
 
 ---
 
-# 🔷 2. SOLID principų taikymas
+## 4. Naudoti design pattern'ai
 
-Projektas praktiškai taiko 5 SOLID principus:
+### Repository Pattern
 
-### ✔ SRP – Single Responsibility Principle
+**Kur:** `src/ApplicationRepository.php`  
+**Kodėl:**
 
-Kiekvienas sluoksnis turi tik vieną atsakomybę.  
+- visi SQL klausimai sukoncentruoti vienoje vietoje;
+- Service/Controller nesirūpina DB detalėmis;
+- galima pakeisti SQLite į MySQL/kitą DB, nekeičiat Controller/Service.
+
+Pavyzdiniai metodai:
+
+- `countSubmittedByTypeForStudent(int $studentId, string $type): int`
+- `updateStatus(int $id, string $status): void`
+- `updateStatusAndComment(int $id, string $status, string $comment): void`
+
+### Service Layer Pattern
+
+**Kur:** `src/ApplicationService.php`  
+**Kodėl:**
+
+- verslo logika atskirta nuo HTTP ir DB;
+- lengviau testuoti (`ApplicationServiceTest.php`);
+- Controller tampa „plonas“ – atsako tik už srautą.
+
+Pavyzdiniai metodai:
+
+- `createDraftForStudent(...)`
+- `submitDraftForStudent(...)`
+- `approveSubmittedByAdmin(int $id)`
+- `rejectWithComment(int $id, string $comment)`
+- `getApplicationsForUser(array $user)`
+
+### MVC-like struktūra
+
+**Kur:** `public/applications/*.php` + `ApplicationController` + `views/applications/*.php`
+
+- public endpoint → controller → service → repository → view;
+- HTML niekada nerašomas service/repository sluoksnyje.
+
+---
+
+## 5. Saugumas
+
+### 5.1. Apsauga nuo SQL Injection
+
+- Naudojamas **PDO** su `prepare()` / `execute()` visoms užklausoms.
+- Nenaudojami string'ų sujungimai kaip `"... WHERE id=$id"` – vietoje to parametrai:
+  - `:id`, `:student_id`, `:email` ir t. t.
+- `db.php` nustatytas:
+  - `PDO::ATTR_ERRMODE = PDO::ERRMODE_EXCEPTION`
+  - `PDO::ATTR_DEFAULT_FETCH_MODE = PDO::FETCH_ASSOC`
+  - `PDO::ATTR_EMULATE_PREPARES = false`
+
+### 5.2. Apsauga nuo XSS (Cross-Site Scripting)
+
+- Visos dinamiškai rodomos reikšmės šablonuose (`*.php` view) yra apgaubiamos:
+  - `htmlspecialchars($value, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8')`
+
 Pvz.:
 
-- Repository – tik DB
-- Service – tik logika
-- Controller – tik request valdymas
-- View – tik HTML
+```php
+<td><?php echo htmlspecialchars($app['title'], ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8'); ?></td>
+```
 
-### ✔ OCP – Open/Closed Principle
+Taip naršyklei neleidžiama traktuoti įvedamo teksto kaip HTML/JS.
 
-Repository galima praplėsti (pvz., MySQL), nekeičiat Service/Controller kodo.
+### 5.3. CSRF apsauga formoms
 
-### ✔ LSP – Liskov Substitution Principle
+Failas: `src/csrf.php`
 
-Controller gali dirbti su bet kuria Service/Repository implementacija.
+```php
+function csrf_token(): string
+{
+    if (empty($_SESSION['csrf_token'])) {
+        $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
+    }
+    return $_SESSION['csrf_token'];
+}
 
-### ✔ ISP – Interface Segregation Principle
+function csrf_verify(?string $token): bool
+{
+    return isset($_SESSION['csrf_token']) && is_string($token) && hash_equals($_SESSION['csrf_token'], $token);
+}
+```
 
-Kiekviena klasė turi tik reikalingus metodus, nėra „didelio interfeiso“.
+Kiekviena POST forma (login, register, create, edit, reject) turi:
 
-### ✔ DIP – Dependency Inversion Principle
+```html
+<input type="hidden" name="csrf_token" value="<?php echo csrf_token(); ?>" />
+```
 
-Priklausomybės tiekiamos per konstruktorių:  
-`ApplicationController → ApplicationService → ApplicationRepository → PDO`
+O request apdorojime:
+
+```php
+$token = $_POST['csrf_token'] ?? null;
+if (!csrf_verify($token)) {
+    $error = 'Neteisingas saugumo žetonas. Perkraukite puslapį ir bandykite dar kartą.';
+}
+```
+
+### 5.4. Login „rate limiting“
+
+Login puslapyje (`public/login.php`):
+
+- naudojamas `$_SESSION['login_attempts']` ir `$_SESSION['login_last_attempt']`;
+- jei yra per daug nesėkmingų bandymų per trumpą laiką (pvz. 5 bandymai per 5 minutes), vartotojas gauna klaidą:
+  - „Per daug nesėkmingų bandymų. Bandykite dar kartą po kelių minučių.“
+
+Po sėkmingo prisijungimo:
+
+```php
+session_regenerate_id(true);
+$_SESSION['user_id'] = $user['id'];
+$_SESSION['login_attempts'] = 0;
+```
+
+### 5.5. Spamo / flood apsauga kuriant paraiškas
+
+`ApplicationRepository`:
+
+```php
+public function countRecentDraftsForStudent(int $studentId, int $seconds): int
+{
+    $stmt = $this->pdo->prepare("
+        SELECT COUNT(*)
+        FROM applications
+        WHERE student_id = :sid
+          AND created_at >= :since
+    ");
+    $stmt->execute([
+        ':sid' => $studentId,
+        ':since' => date('Y-m-d H:i:s', time() - $seconds),
+    ]);
+
+    return (int)$stmt->fetchColumn();
+}
+```
+
+`ApplicationService::createDraftForStudent(...)`:
+
+```php
+if ($this->repository->countRecentDraftsForStudent($studentId, 60) >= 5) {
+    return 'Per daug bandymų sukurti paraiškas. Palaukite minutę ir bandykite vėl.';
+}
+```
+
+### 5.6. Sesijų apsauga
+
+- `session_regenerate_id(true)` po sėkmingo prisijungimo.
+- Tikrinama, ar vartotojas egzistuoja DB, prieš laikant jį prisijungusiu.
 
 ---
 
-# 🔷 3. Naudoti design pattern’ai
+## 6. Testai
 
-### ✔ Repository Pattern
+Projektas turi **unit testus** su **PHPUnit**, kurie tikrina:
 
-Kodėl?
+- verslo taisyklę: „max 3 submitted paraiškos vieno tipo studentui“
+- statusų keitimą:
+  - `submitted → approved`
+  - `submitted → rejected` (su atmetimo komentaru)
+- validaciją kuriant ruošinį
 
-- SQL logika atskirta nuo verslo logikos
-- Lengviau testuoti (mock'inti Repository)
-- Lengva pakeisti DB variklį
+Failai:
 
-Pvz.:  
-`ApplicationRepository::countSubmittedByTypeForStudent()`  
-`ApplicationRepository::updateStatus()`
+- `tests/bootstrap.php`
+- `tests/ApplicationServiceTest.php`
+- `phpunit.xml`
 
-### ✔ Service Layer Pattern
+Testai naudoja **in-memory SQLite** (`sqlite::memory:`), todėl nekeičia `data/app.sqlite`.
 
-Kodėl?
+### Testų paleidimas
 
-- Verslo taisyklės atskirtos nuo controllerio
-- Lengva testuoti Service logiką su unit testais
-- Controller „plonas“, Service „protingas“
-
-Pvz.:  
-`ApplicationService::submitDraftForStudent()`  
-tikrina:
-
-- ar paraiška priklauso studentui
-- ar ji draft
-- ar neviršyta 3 submitted riba
-
-### ✔ MVC-like pattern
-
-Kodėl?
-
-- logika izoliuota nuo HTML
-- lengva keisti UI neliečiant logikos
-
----
-
-# 🔷 4. Nuorodos į svarbiausias klases/metodus
-
-| Kategorija | Failas                             | Metodai                                                                                                  |
-| ---------- | ---------------------------------- | -------------------------------------------------------------------------------------------------------- |
-| Controller | `src/ApplicationController.php`    | `list()`, `submit()`, `approve()`, `reject()`, `updateEdit()`                                            |
-| Service    | `src/ApplicationService.php`       | `createDraftForStudent()`, `submitDraftForStudent()`, `approveSubmittedByAdmin()`, `rejectWithComment()` |
-| Repository | `src/ApplicationRepository.php`    | `findById()`, `countSubmittedByTypeForStudent()`, `updateStatus()`                                       |
-| DB         | `src/db.php`                       | `initDatabase()`, `initUsersTable()`, `initApplicationsTable()`                                          |
-| Views      | `views/applications/`              | `list.php`, `edit.php`, `reject.php`                                                                     |
-| Tests      | `tests/ApplicationServiceTest.php` | visi 4 testai                                                                                            |
-
----
-
-# 🔷 5. Paleidimo instrukcijos
-
-### ▶️ Serverio paleidimas
-
-```
-php -S localhost:8000 -t public
-```
-
-Atidaryk naršyklėje:
-
-```
-http://localhost:8000/
-```
-
----
-
-## 🔐 Prisijungimo duomenys (demo)
-
-### Administratorius (seed)
-
-- Email: **admin@example.com**
-- Slaptažodis: **admin123**
-
-### Studentas (seed)
-
-- Email: **student@example.com**
-- Slaptažodis: **student123**
-
-### Nauji studentai:
-
-```
-/register.php
-```
-
----
-
-# 🔷 6. Unit testai
-
-Šis projektas turi **4 unit testus**, kurie tikrina:
-
-- taisyklę **„max 3 submitted per tipo“**
-- statusų keitimą (`approved`, `rejected`)
-- atmetimo komentaro išsaugojimą
-
-### ▶️ Testų paleidimas
-
-1. Įdiek priklausomybes:
-
-```
+```bash
 composer install
-```
-
-2. Paleisk testus:
-
-```
 vendor/bin/phpunit
 ```
 
-Tikėtinas output:
+Tikėtinas rezultatas:
 
-```
+```text
 OK (4 tests, 8 assertions)
 ```
 
-Testai naudoja `sqlite::memory:`, todėl:
+---
 
-- greiti
-- izoliuoti
-- nekeičia tikros DB
+## 7. Projekto struktūra
+
+```text
+students-app/
+│
+├── public/
+│   ├── index.php
+│   ├── login.php
+│   ├── register.php
+│   ├── logout.php
+│   ├── css/
+│   │   └── water.css
+│   └── applications/
+│       ├── index.php
+│       ├── edit.php
+│       └── reject.php
+│
+├── src/
+│   ├── db.php
+│   ├── View.php
+│   ├── ApplicationRepository.php
+│   ├── ApplicationService.php
+│   ├── ApplicationController.php
+│   ├── csrf.php
+│   └── helpers.php (pvz. `e()` HTML escape funkcijai)
+│
+├── views/
+│   └── applications/
+│       ├── list.php
+│       ├── edit.php
+│       └── reject.php
+│
+├── tests/
+│   ├── bootstrap.php
+│   └── ApplicationServiceTest.php
+│
+├── data/
+│   └── app.sqlite
+│
+├── composer.json
+├── composer.lock
+├── phpunit.xml
+└── README.md
+```
 
 ---
 
-# 🔷 7. Ką padaryčiau kitaip, jei turėčiau daugiau laiko?
+## 8. Paleidimo instrukcijos
 
-- Įdėčiau **Composer autoloading (PSR-4)** vietoj `require`.
-- Sukurčiau **tikrą routerį** (vietoj atskirų PHP failų public kataloge).
-- Išskaidyčiau „status“ į **State pattern** implementaciją.
-- Sukurčiau API (REST) versiją.
-- Pridėčiau Bootstrap/Tailwind šiuolaikiškam dizainui.
-- Parašyčiau daugiau unit testų + testus Repository sluoksniui.
-- Įdėčiau Docker (`docker-compose`) dėl lengvo paleidimo.
+1. Paleisti PHP serverį:
+
+```bash
+php -S localhost:8000 -t public
+```
+
+2. Atidaryti naršyklėje:
+
+```text
+http://localhost:8000/
+```
+
+3. Duomenų bazės failas sukuriamas automatiškai:
+
+```text
+data/app.sqlite
+```
 
 ---
 
-# 👤 Autorius
+## 9. Ką daryčiau kitaip, jei turėčiau daugiau laiko?
 
-Įrašyk savo vardą, GitHub profilį ir el. paštą.
+- Įdėčiau **Composer autoloading pagal PSR-4** ir pašalinčiau `require` iš PHP failų.
+- Sukurčiau atskirą **routerio sluoksnį** (`/index.php` → router → controller).
+- Dar labiau išskaidyčiau statusų logiką naudojant **State pattern** (ApplicationStatus objektai).
+- Parašyčiau daugiau testų:
+  - integracinių testų Controller/View sluoksniams,
+  - testų autentifikacijai (login/registration).
+- Įdėčiau **Docker** (`Dockerfile + docker-compose.yml`) lengvam paleidimui įvairiose aplinkose.
+- Pridėčiau REST API (`/api/applications`, `/api/login`) ir galimą SPA front-end (React/Vue).
+- Sukurčiau gražesnį UI su Bootstrap/Tailwind (nors pagal užduotį dizainas nėra vertinimo kriterijus).
+
+---
+
+## 10. Autorius
+
+Įrašyk:
+
+- Vardas Pavardė
+- GitHub profilis
+- El. paštas

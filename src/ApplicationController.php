@@ -2,11 +2,8 @@
 
 class ApplicationController
 {
-    private ApplicationService $service;
-
-    public function __construct(ApplicationService $service)
+    public function __construct(private ApplicationService $service)
     {
-        $this->service = $service;
     }
 
     public function list(array $currentUser): array
@@ -14,15 +11,15 @@ class ApplicationController
         return $this->service->getApplicationsForUser($currentUser);
     }
 
-    public function create(array $currentUser, array $post): ?string
+    public function create(array $currentUser, array $data): ?string
     {
         if ($currentUser['role'] !== 'student') {
-            return 'Only students can create applications.';
+            return 'Tik studentai gali kurti paraiškas.';
         }
 
-        $title = trim($post['title'] ?? '');
-        $description = trim($post['description'] ?? '');
-        $type = trim($post['type'] ?? '');
+        $title = $data['title'] ?? '';
+        $description = $data['description'] ?? '';
+        $type = $data['type'] ?? '';
 
         return $this->service->createDraftForStudent(
             (int)$currentUser['id'],
@@ -35,11 +32,7 @@ class ApplicationController
     public function submit(array $currentUser, int $id): ?string
     {
         if ($currentUser['role'] !== 'student') {
-            return null;
-        }
-
-        if ($id <= 0) {
-            return null;
+            return 'Tik studentai gali pateikti paraiškas.';
         }
 
         return $this->service->submitDraftForStudent($id, (int)$currentUser['id']);
@@ -51,43 +44,18 @@ class ApplicationController
             return;
         }
 
-        if ($id <= 0) {
-            return;
-        }
-
         $this->service->approveSubmittedByAdmin($id);
     }
 
-    public function getEditData(array $currentUser, int $id): ?array
+    public function reject(array $currentUser, int $id, array $data): ?string
     {
-        if ($currentUser['role'] !== 'student') {
-            return null;
+        if ($currentUser['role'] !== 'admin') {
+            return 'Tik administratoriai gali atmesti paraiškas.';
         }
 
-        if ($id <= 0) {
-            return null;
-        }
+        $comment = $data['rejection_comment'] ?? '';
 
-        return $this->service->getDraftForEditing($id, (int)$currentUser['id']);
-    }
-
-    public function updateEdit(array $currentUser, int $id, array $post): ?string
-    {
-        if ($currentUser['role'] !== 'student') {
-            return 'Not allowed.';
-        }
-
-        $title = trim($post['title'] ?? '');
-        $description = trim($post['description'] ?? '');
-        $type = trim($post['type'] ?? '');
-
-        return $this->service->updateDraftForStudent(
-            $id,
-            (int)$currentUser['id'],
-            $title,
-            $description,
-            $type
-        );
+        return $this->service->rejectWithComment($id, $comment);
     }
 
     public function getRejectData(array $currentUser, int $id): ?array
@@ -96,21 +64,30 @@ class ApplicationController
             return null;
         }
 
-        if ($id <= 0) {
-            return null;
-        }
-
-        return $this->service->getSubmittedForRejection($id);
+        return $this->service->getApplicationForAdmin($id);
     }
 
-    public function reject(array $currentUser, int $id, array $post): ?string
+    public function getEditData(array $currentUser, int $id): ?array
     {
-        if ($currentUser['role'] !== 'admin') {
-            return 'Not allowed.';
+        return $this->service->getApplicationForEdit($id, $currentUser);
+    }
+
+    public function updateEdit(array $currentUser, int $id, array $data): ?string
+    {
+        if ($currentUser['role'] !== 'student') {
+            return 'Tik studentai gali redaguoti paraiškas.';
         }
 
-        $comment = trim($post['rejection_comment'] ?? '');
+        $title = $data['title'] ?? '';
+        $description = $data['description'] ?? '';
+        $type = $data['type'] ?? '';
 
-        return $this->service->rejectWithComment($id, $comment);
+        return $this->service->updateDraftForStudent(
+            $id,
+            $currentUser,
+            $title,
+            $description,
+            $type
+        );
     }
 }

@@ -5,15 +5,19 @@ function getPDO(): PDO
     static $pdo = null;
 
     if ($pdo === null) {
-        $dbPath = __DIR__ . '/../data/app.sqlite';
+        $dbDir = __DIR__ . '/../data';
+
+        if (!is_dir($dbDir)) {
+            mkdir($dbDir, 0777, true);
+        }
+
+        $dbPath = $dbDir . '/app.sqlite';
         $dsn = 'sqlite:' . $dbPath;
 
-        try {
-            $pdo = new PDO($dsn);
-            $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
-        } catch (PDOException $e) {
-            die('DB error: ' . htmlspecialchars($e->getMessage()));
-        }
+        $pdo = new PDO($dsn);
+        $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+        $pdo->setAttribute(PDO::ATTR_DEFAULT_FETCH_MODE, PDO::FETCH_ASSOC);
+        $pdo->setAttribute(PDO::ATTR_EMULATE_PREPARES, false);
     }
 
     return $pdo;
@@ -21,23 +25,13 @@ function getPDO(): PDO
 
 function initDatabase(): void
 {
-    $pdo = getPDO();
-
-    $sql = "
-        CREATE TABLE IF NOT EXISTS test (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            created_at TEXT NOT NULL
-        )
-    ";
-
-    $pdo->exec($sql);
+    getPDO();
 }
 
 function initUsersTable(): void
 {
     $pdo = getPDO();
 
-    // Create table with email + password_hash
     $sql = "
         CREATE TABLE IF NOT EXISTS users (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -49,7 +43,6 @@ function initUsersTable(): void
     ";
     $pdo->exec($sql);
 
-    // Check if empty
     $count = (int)$pdo->query("SELECT COUNT(*) FROM users")->fetchColumn();
 
     if ($count === 0) {
@@ -58,7 +51,6 @@ function initUsersTable(): void
             VALUES (:name, :email, :password_hash, :role)
         ");
 
-        // Student User
         $stmt->execute([
             ':name' => 'Student User',
             ':email' => 'student@example.com',
@@ -66,7 +58,6 @@ function initUsersTable(): void
             ':role' => 'student',
         ]);
 
-        // Admin User
         $stmt->execute([
             ':name' => 'Admin User',
             ':email' => 'admin@example.com',
@@ -75,7 +66,6 @@ function initUsersTable(): void
         ]);
     }
 }
-
 
 function initApplicationsTable(): void
 {
@@ -89,37 +79,59 @@ function initApplicationsTable(): void
             description TEXT NOT NULL,
             type TEXT NOT NULL,
             status TEXT NOT NULL,
+            rejection_comment TEXT DEFAULT NULL,
             created_at TEXT NOT NULL,
             FOREIGN KEY (student_id) REFERENCES users(id)
         )
     ";
-
     $pdo->exec($sql);
 
     try {
-        // add column if not exists
         $pdo->exec("ALTER TABLE applications ADD COLUMN rejection_comment TEXT");
     } catch (PDOException $e) {
-        // ignore
+        // ignore if already exists
     }
 }
 
+function findUserByEmail(string $email): ?array
+{
+    $pdo = getPDO();
+
+    $stmt = $pdo->prepare("SELECT * FROM users WHERE email = :email");
+    $stmt->execute([':email' => $email]);
+    $user = $stmt->fetch();
+
+    return $user ?: null;
+}
 
 function findUserById(int $id): ?array
 {
     $pdo = getPDO();
 
-    $stmt = $pdo->prepare("SELECT id, name, role FROM users WHERE id = :id");
+    $stmt = $pdo->prepare("SELECT id, name, role, email FROM users WHERE id = :id");
     $stmt->execute([':id' => $id]);
-    $user = $stmt->fetch(PDO::FETCH_ASSOC);
+    $user = $stmt->fetch();
 
     return $user ?: null;
 }
 
-function getAllUsers(): array
+function createUser(string $name, string $email, string $passwordHash, string $role = 'student'): bool
 {
     $pdo = getPDO();
 
-    $stmt = $pdo->query("SELECT id, name, role FROM users ORDER BY id ASC");
-    return $stmt->fetchAll(PDO::FETCH_ASSOC);
+    $stmt = $pdo->prepare("
+        INSERT INTO users (name, email, password_hash, role)
+        VALUES (:name, :email, :password_hash, :role)
+    ");
+
+    try {
+        return $stmt->execute([
+            ':name' => $name,
+            ':email' => $email,
+            ':password_hash' => $passwordHash,
+            ':role' => $role,
+        ]);
+    } catch (PDOException $e) {
+        return false;
+    }
 }

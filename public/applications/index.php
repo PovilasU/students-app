@@ -6,6 +6,7 @@ require __DIR__ . '/../../src/ApplicationRepository.php';
 require __DIR__ . '/../../src/ApplicationService.php';
 require __DIR__ . '/../../src/ApplicationController.php';
 require __DIR__ . '/../../src/View.php';
+require __DIR__ . '/../../src/csrf.php';
 
 initDatabase();
 initUsersTable();
@@ -35,7 +36,7 @@ unset($_SESSION['flash_error']);
 
 $error = null;
 
-// submit (student)
+// submit student (GET)
 if (
     isset($_GET['action'], $_GET['id']) &&
     $_GET['action'] === 'submit'
@@ -51,7 +52,7 @@ if (
     exit;
 }
 
-// approve (admin)
+// approve admin (GET)
 if (
     isset($_GET['action'], $_GET['id']) &&
     $_GET['action'] === 'approve'
@@ -64,25 +65,26 @@ if (
     exit;
 }
 
-// create new (student)
+// create new application (POST, student)
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    $error = $controller->create($currentUser, $_POST);
+    $token = $_POST['csrf_token'] ?? null;
+    if (!csrf_verify($token)) {
+        $error = 'Neteisingas saugumo žetonas. Perkraukite puslapį ir bandykite dar kartą.';
+    } else {
+        $error = $controller->create($currentUser, $_POST);
 
-    if ($error === null) {
-        header('Location: /applications/index.php');
-        exit;
+        if ($error === null) {
+            header('Location: /applications/index.php');
+            exit;
+        }
     }
 }
 
 $applications = $controller->list($currentUser);
 
-// DEBUG: kad matytum, jog tikrai naudojamas view
-// gali ištrinti, kai įsitikinsi
-// echo "[DEBUG] Naudojamas views/applications/list.php<br>";
-
 $view->render('applications/list.php', [
-    'currentUser' => $currentUser,
-    'flashError'  => $flashError,
-    'error'       => $error,
-    'applications'=> $applications,
+    'currentUser'  => $currentUser,
+    'flashError'   => $flashError,
+    'error'        => $error,
+    'applications' => $applications,
 ]);

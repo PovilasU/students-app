@@ -6,6 +6,7 @@ require __DIR__ . '/../../src/ApplicationRepository.php';
 require __DIR__ . '/../../src/ApplicationService.php';
 require __DIR__ . '/../../src/ApplicationController.php';
 require __DIR__ . '/../../src/View.php';
+require __DIR__ . '/../../src/csrf.php';
 
 initDatabase();
 initUsersTable();
@@ -38,11 +39,16 @@ if ($id <= 0) {
 $error = null;
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    $error = $controller->reject($currentUser, $id, $_POST);
+    $token = $_POST['csrf_token'] ?? null;
+    if (!csrf_verify($token)) {
+        $error = 'Neteisingas saugumo žetonas. Perkraukite puslapį ir bandykite dar kartą.';
+    } else {
+        $error = $controller->reject($currentUser, $id, $_POST);
 
-    if ($error === null) {
-        header('Location: /applications/index.php');
-        exit;
+        if ($error === null) {
+            header('Location: /applications/index.php');
+            exit;
+        }
     }
 
     $application = $controller->getRejectData($currentUser, $id);
@@ -55,7 +61,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 }
 
 $view->render('applications/reject.php', [
-    'currentUser' => $currentUser,
-    'application' => $application,
-    'error' => $error,
+    'currentUser'  => $currentUser,
+    'application'  => $application,
+    'error'        => $error,
 ]);
