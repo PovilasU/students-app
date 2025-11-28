@@ -138,13 +138,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 }
 
-// test table debug
-$stmt = $pdo->prepare("INSERT INTO test (created_at) VALUES (:created_at)");
-$stmt->execute([
-    ':created_at' => date('Y-m-d H:i:s'),
-]);
-$testCount = (int)$pdo->query("SELECT COUNT(*) FROM test")->fetchColumn();
-
 // load applications list
 if ($currentUser['role'] === 'student') {
     $applicationsStmt = $pdo->prepare("
@@ -215,11 +208,6 @@ $applications = $applicationsStmt->fetchAll(PDO::FETCH_ASSOC);
 
         <hr>
     <?php endif; ?>
-
-    <h2>DB statusas</h2>
-    <p>Test lentelėje įrašų: <strong><?php echo $testCount; ?></strong></p>
-
-    <hr>
 
     <h2>Paraiškų sąrašas</h2>
 
