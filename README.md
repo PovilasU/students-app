@@ -1,102 +1,82 @@
 # Studentų paraiškų valdymo sistema (PHP + SQLite)
 
-Tai pilnai veikianti studentų paraiškų valdymo sistema, sukurta naudojant **gryną PHP**, **SQLite** bei taikant modernius programinės įrangos architektūros principus:  
-**SOLID**, **Repository pattern**, **Service layer**, **Controller layer**, **View templates**, **Separation of Concerns** ir **MVC tipo struktūra**.
+Tai pilnai veikianti studentų paraiškų valdymo sistema, sukurta naudojant **gryną PHP**, **SQLite**, ir taikant gerąsias programavimo praktikas:
 
-Sistema palaiko du naudotojų vaidmenis:
+- **SOLID principai**
+- **Repository pattern**
+- **Service layer**
+- **Controller layer**
+- **View templates** (MVC-type)
+- **Dependency Injection**
+- **Separation of Concerns**
 
-- **Studentas** – gali kurti, redaguoti ir pateikti paraiškas (draft → submitted)
-- **Administratorius** – gali peržiūrėti, patvirtinti arba atmesti paraiškas su komentaru
+Sistema palaiko 2 naudotojų vaidmenis:
 
-Projektas sukurtas siekiant pademonstruoti gerą PHP kodo struktūrą be framework’o.
+- **Studentas**
+- **Administratorius**
 
 ---
 
 ## 🚀 Funkcionalumas
 
-### Studentas
-- Kuria naują paraišką (**draft**)
-- Redaguoja esamą ruošinį
-- Pateikia paraišką (**submitted**)
-- Negali pateikti daugiau nei **3 vieno tipo** paraiškų
-- Matyti administratoriaus **atmetimo komentarą**
+### 👨‍🎓 Studentas gali:
+- Registruotis sistemoje (*nauja funkcija*)
+- Prisijungti su el. paštu ir slaptažodžiu
+- Kurti naują paraišką (**draft**)
+- Redaguoti ruošinį
+- Pateikti paraišką (**submitted**)
+- Pateikti ne daugiau kaip **3 vieno tipo** paraiškų
+- Matyti administratoriaus atmetimo komentarus (**rejected**)
 
-### Administratorius
-- Matyti visas studentų paraiškas
-- Patvirtinti paraiškas (**approved**)
-- Atmesti paraiškas (**rejected**) su **privalomu komentaru**
-
----
-
-# 🧠 Architektūra ir dizaino principai
-
-Projektas sukurtas naudojant kelis svarbius programavimo principus:
+### 🛡 Administratorius gali:
+- Prisijungti (via seeded credentials)
+- Matyti visas paraiškas
+- Patvirtinti paraišką (**approved**)
+- Atmesti paraišką su **privalomu komentaru**
 
 ---
 
-## 🟦 SOLID principai
+## 🔐 Autentifikacija
 
-### ✔ S – Single Responsibility Principle  
-Kiekvienas komponentas turi vieną atsakomybę:  
-Repository → DB logika  
-Service → verslo logika  
-Controller → request'ai  
-View → HTML šablonai  
+### ✔ Tikras prisijungimas
+- `email + password`
+- `password_hash` saugojimui
+- `password_verify()` tikrinimui
 
-### ✔ O – Open/Closed Principle  
-Sistemos komponentai lengvai plečiami nekeičiant bazinio kodo.
+### ✔ Registracija (Studentams)
+Kelias:  
+`/register.php`
 
-### ✔ L – Liskov Substitution Principle  
-Kodas lengvai pakeičiamas alternatyviomis implementacijomis.
+Registracijos metu:
+- Tikrinamas el. paštas (unique)
+- Tikrinamas slaptažodis (≥6 simboliai)
+- Saugojamas `password_hash`
+- Naujas vartotojas automatiškai prisijungiamas
 
-### ✔ I – Interface Segregation Principle  
-Funkcionalumas suskaidytas į mažus, tikslius komponentus.
-
-### ✔ D – Dependency Inversion Principle  
-Controller gauna Service ir Repository per dependency injection.
+Administratorius kūrimas vyksta automatiškai seed’inant DB.
 
 ---
 
-## 🟩 Repository pattern
+## 🧠 Architektūra ir Dizaino Principai
 
-`ApplicationRepository.php` atsakingas tik už duomenų bazės užklausas.  
-Galima lengvai pakeisti SQLite į MySQL ar PostgreSQL nekeičiat controllerių.
+### 🟦 SOLID  
+Single Responsibility, Dependency Inversion ir kt.
 
----
+### 🟩 Repository Pattern  
+Visi DB užklausų veiksmai iškelti į `ApplicationRepository`.
 
-## 🟧 Service layer
+### 🟧 Service Layer  
+Verslo logika – max 3 aplikacijos / tipo, validacijos, permissions.
 
-`ApplicationService.php` įgyvendina visą verslo logiką:
+### 🟪 Controllers  
+Tvarko request’us, kviečia service, perduoda duomenis į view.
 
-- max 3 submitted per type
-- validacijos
-- leidimų tikrinimas
-
----
-
-## 🟪 Controller layer
-
-`ApplicationController.php` atsakingas už:
-
-- veiksmų valdymą (submit/edit/reject)
-- response duomenų paruošimą
-- klaidų valdymą
+### 🟦 Views (Templates)  
+HTML iškelta į `/views/applications/`.
 
 ---
 
-## 🟦 View templates (MVC)
-
-Visas HTML iškeltas į `/views/applications/`, o controller tik perduoda duomenis į šablonus.
-
-Tai suteikia:
-
-- švarų kodą
-- lengvesnę plėtrą
-- geresnį skaidrumą
-
----
-
-## 🗂 Projekto struktūra
+## 📁 Projekto struktūra
 
 ```
 students-app/
@@ -104,6 +84,7 @@ students-app/
 ├── public/
 │   ├── index.php
 │   ├── login.php
+│   ├── register.php
 │   ├── logout.php
 │   ├── css/
 │   │   └── water.css
@@ -133,42 +114,56 @@ students-app/
 
 ---
 
-## 🔧 Paleidimas
+## 🧪 Prisijungimo duomenys (Demo)
 
-1. ```
-   php -S localhost:8000 -t public
-   ```
-2. Naršyklėje atidaryti:  
-   `http://localhost:8000/`
-
----
-
-## 🔐 Prisijungimo duomenys
-
-### Studentas
+### Studentas (seed):
 - Email: **student@example.com**
 - Slaptažodis: **student123**
 
-### Administratorius
+### Administratorius:
 - Email: **admin@example.com**
 - Slaptažodis: **admin123**
 
+### Nauji studentai:
+- Registruojasi per `/register.php`
+
 ---
 
-## ✔ Užduoties reikalavimai – įgyvendinti
+## 🛠 Paleidimas
+
+1. Paleisti serverį:
+   ```bash
+   php -S localhost:8000 -t public
+   ```
+2. Naršyklėje atidaryti:
+   ```text
+   http://localhost:8000/
+   ```
+
+DB failas sukuriamas automatiškai:
+```text
+data/app.sqlite
+```
+
+---
+
+## ✔ Užduoties reikalavimai – įgyvendinta
 
 | Reikalavimas | Įgyvendinta |
 |--------------|-------------|
 | Studentas gali kurti paraišką | ✔ |
-| Studentas gali redaguoti ruošinį | ✔ |
-| Studentas gali pateikti | ✔ |
-| Max 3 per tipą | ✔ |
+| Studentas gali redaguoti paraišką | ✔ |
+| Studentas gali pateikti paraišką | ✔ |
+| Max 3 submitted vieno tipo | ✔ |
 | Admin mato visas paraiškas | ✔ |
-| Admin gali patvirtinti | ✔ |
+| Admin gali patvirtinti paraišką | ✔ |
 | Admin gali atmesti su komentaru | ✔ |
 | Studentas mato komentarą | ✔ |
 | Tikras login | ✔ |
+| Registracija studentams | ✔ |
 | MVC-like architektūra | ✔ |
+| Service / Repository patterns | ✔ |
+| SOLID principai | ✔ |
 
 ---
 
