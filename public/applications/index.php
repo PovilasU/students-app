@@ -79,6 +79,7 @@ $applications = $controller->list($currentUser);
 <head>
     <meta charset="UTF-8">
     <title>Paraiškų sistema</title>
+    <link rel="stylesheet" href="../css/water.css">
 </head>
 <body>
     <h1>Paraiškų sistema</h1>
