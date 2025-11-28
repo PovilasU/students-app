@@ -1,66 +1,51 @@
-<?php
-session_start();
+<!DOCTYPE html>
+<html lang="lt">
+<head>
+    <meta charset="UTF-8">
+    <title>Redaguoti paraišką</title>
+    <link rel="stylesheet" href="/css/water.css">
+</head>
+<body>
+    <h1>Redaguoti paraišką (ruošinys)</h1>
 
-require __DIR__ . '/../../src/db.php';
-require __DIR__ . '/../../src/ApplicationRepository.php';
-require __DIR__ . '/../../src/ApplicationService.php';
-require __DIR__ . '/../../src/ApplicationController.php';
-require __DIR__ . '/../../src/View.php';
+    <p>
+        Prisijungęs:
+        <strong><?php echo htmlspecialchars($currentUser['name']); ?></strong>
+        (<?php echo htmlspecialchars($currentUser['role'] === 'student' ? 'studentas' : 'administratorius'); ?>)
+        | <a href="/applications/index.php">Atgal į paraiškų sąrašą</a>
+        | <a href="/logout.php">Atsijungti</a>
+    </p>
 
-initDatabase();
-initUsersTable();
-initApplicationsTable();
+    <?php if (!empty($error)): ?>
+        <p style="color: red;"><?php echo htmlspecialchars($error); ?></p>
+    <?php endif; ?>
 
-$pdo = getPDO();
-$repository = new ApplicationRepository($pdo);
-$service = new ApplicationService($repository);
-$controller = new ApplicationController($service);
-$view = new View();
-
-if (!isset($_SESSION['user_id'])) {
-    header('Location: /login.php');
-    exit;
-}
-
-$currentUser = findUserById((int)$_SESSION['user_id']);
-
-if ($currentUser === null || $currentUser['role'] !== 'student') {
-    header('Location: /applications/index.php');
-    exit;
-}
-
-$id = (int)($_GET['id'] ?? 0);
-if ($id <= 0) {
-    header('Location: /applications/index.php');
-    exit;
-}
-
-$error = null;
-
-if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    $error = $controller->updateEdit($currentUser, $id, $_POST);
-
-    if ($error === null) {
-        header('Location: /applications/index.php');
-        exit;
-    }
-
-    $application = [
-        'id' => $id,
-        'title' => trim($_POST['title'] ?? ''),
-        'description' => trim($_POST['description'] ?? ''),
-        'type' => trim($_POST['type'] ?? ''),
-    ];
-} else {
-    $application = $controller->getEditData($currentUser, $id);
-    if (!$application) {
-        header('Location: /applications/index.php');
-        exit;
-    }
-}
-
-$view->render('applications/edit.php', [
-    'currentUser' => $currentUser,
-    'application' => $application,
-    'error' => $error,
-]);
+    <form method="post" action="/applications/edit.php?id=<?php echo (int)$application['id']; ?>">
+        <div>
+            <label>
+                Pavadinimas:
+                <input type="text" name="title"
+                       value="<?php echo htmlspecialchars($application['title']); ?>" required>
+            </label>
+        </div>
+        <div>
+            <label>
+                Tipas:
+                <input type="text" name="type"
+                       value="<?php echo htmlspecialchars($application['type']); ?>" required>
+            </label>
+        </div>
+        <div>
+            <label>
+                Aprašymas:<br>
+                <textarea name="description" rows="4" cols="40" required><?php
+                    echo htmlspecialchars($application['description']);
+                ?></textarea>
+            </label>
+        </div>
+        <div>
+            <button type="submit">Išsaugoti ruošinį</button>
+        </div>
+    </form>
+</body>
+</html>

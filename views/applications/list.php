@@ -6,11 +6,30 @@
     <link rel="stylesheet" href="/css/water.css">
 </head>
 <body>
+    
+    <?php
+    function lt_status_label(string $status): string {
+        switch ($status) {
+            case 'draft':
+                return 'Ruošinys';
+            case 'submitted':
+                return 'Pateikta';
+            case 'approved':
+                return 'Patvirtinta';
+            case 'rejected':
+                return 'Atmesta';
+            default:
+                return $status;
+        }
+    }
+    ?>
+
     <h1>Paraiškų sistema</h1>
 
     <p>
-        Prisijungęs: <strong><?php echo htmlspecialchars($currentUser['name']); ?></strong>
-        (<?php echo htmlspecialchars($currentUser['role']); ?>)
+        Prisijungęs:
+        <strong><?php echo htmlspecialchars($currentUser['name']); ?></strong>
+        (<?php echo htmlspecialchars($currentUser['role'] === 'student' ? 'studentas' : 'administratorius'); ?>)
         | <a href="/applications/index.php">Paraiškos</a>
         | <a href="/logout.php">Atsijungti</a>
     </p>
@@ -46,7 +65,7 @@
                 </label>
             </div>
             <div>
-                <button type="submit">Sukurti paraišką (draft)</button>
+                <button type="submit">Sukurti paraišką (ruošinys)</button>
             </div>
         </form>
 
@@ -76,7 +95,7 @@
                     <td><?php echo htmlspecialchars($app['id']); ?></td>
                     <td><?php echo htmlspecialchars($app['title']); ?></td>
                     <td><?php echo htmlspecialchars($app['type']); ?></td>
-                    <td><?php echo htmlspecialchars($app['status']); ?></td>
+                    <td><?php echo htmlspecialchars(lt_status_label($app['status'])); ?></td>
                     <td><?php echo htmlspecialchars($app['created_at']); ?></td>
                     <td>
                         <?php
@@ -87,9 +106,9 @@
                     </td>
                     <td>
                         <?php if ($currentUser['role'] === 'student' && $app['status'] === 'draft'): ?>
-                            <a href="/applications/edit.php?id=<?php echo (int)$app['id']; ?>">Redaguoti</a>
+                            <a href="/applications/edit.php?id=<?php echo (int)$app['id']; ?>">Redaguoti ruošinį</a>
                             |
-                            <a href="/applications/index.php?action=submit&id=<?php echo (int)$app['id']; ?>">Pateikti</a>
+                            <a href="/applications/index.php?action=submit&id=<?php echo (int)$app['id']; ?>">Pateikti paraišką</a>
                         <?php elseif ($currentUser['role'] === 'admin' && $app['status'] === 'submitted'): ?>
                             <a href="/applications/index.php?action=approve&id=<?php echo (int)$app['id']; ?>">Patvirtinti</a>
                             |

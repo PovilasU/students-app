@@ -1,61 +1,40 @@
-<?php
-session_start();
+<!DOCTYPE html>
+<html lang="lt">
+<head>
+    <meta charset="UTF-8">
+    <title>Atmesti paraišką</title>
+    <link rel="stylesheet" href="/css/water.css">
+</head>
+<body>
+    <h1>Atmesti paraišką</h1>
 
-require __DIR__ . '/../../src/db.php';
-require __DIR__ . '/../../src/ApplicationRepository.php';
-require __DIR__ . '/../../src/ApplicationService.php';
-require __DIR__ . '/../../src/ApplicationController.php';
-require __DIR__ . '/../../src/View.php';
+    <p>
+        Prisijungęs:
+        <strong><?php echo htmlspecialchars($currentUser['name']); ?></strong>
+        (<?php echo htmlspecialchars($currentUser['role'] === 'student' ? 'studentas' : 'administratorius'); ?>)
+        | <a href="/applications/index.php">Atgal į paraiškų sąrašą</a>
+        | <a href="/logout.php">Atsijungti</a>
+    </p>
 
-initDatabase();
-initUsersTable();
-initApplicationsTable();
+    <h2>Paraiškos duomenys</h2>
+    <p><strong>ID:</strong> <?php echo htmlspecialchars($application['id']); ?></p>
+    <p><strong>Pavadinimas:</strong> <?php echo htmlspecialchars($application['title']); ?></p>
+    <p><strong>Tipas:</strong> <?php echo htmlspecialchars($application['type']); ?></p>
 
-$pdo = getPDO();
-$repository = new ApplicationRepository($pdo);
-$service = new ApplicationService($repository);
-$controller = new ApplicationController($service);
-$view = new View();
+    <?php if (!empty($error)): ?>
+        <p style="color: red;"><?php echo htmlspecialchars($error); ?></p>
+    <?php endif; ?>
 
-if (!isset($_SESSION['user_id'])) {
-    header('Location: /login.php');
-    exit;
-}
-
-$currentUser = findUserById((int)$_SESSION['user_id']);
-
-if ($currentUser === null || $currentUser['role'] !== 'admin') {
-    header('Location: /applications/index.php');
-    exit;
-}
-
-$id = (int)($_GET['id'] ?? 0);
-if ($id <= 0) {
-    header('Location: /applications/index.php');
-    exit;
-}
-
-$error = null;
-
-if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    $error = $controller->reject($currentUser, $id, $_POST);
-
-    if ($error === null) {
-        header('Location: /applications/index.php');
-        exit;
-    }
-
-    $application = $controller->getRejectData($currentUser, $id);
-} else {
-    $application = $controller->getRejectData($currentUser, $id);
-    if (!$application) {
-        header('Location: /applications/index.php');
-        exit;
-    }
-}
-
-$view->render('applications/reject.php', [
-    'currentUser' => $currentUser,
-    'application' => $application,
-    'error' => $error,
-]);
+    <form method="post" action="/applications/reject.php?id=<?php echo (int)$application['id']; ?>">
+        <div>
+            <label>
+                Atmetimo komentaras:<br>
+                <textarea name="rejection_comment" rows="4" cols="40" required></textarea>
+            </label>
+        </div>
+        <div>
+            <button type="submit">Atmesti paraišką</button>
+        </div>
+    </form>
+</body>
+</html>

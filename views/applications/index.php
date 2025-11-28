@@ -35,6 +35,7 @@ unset($_SESSION['flash_error']);
 
 $error = null;
 
+// submit student
 if (
     isset($_GET['action'], $_GET['id']) &&
     $_GET['action'] === 'submit'
@@ -50,6 +51,7 @@ if (
     exit;
 }
 
+// approve admin
 if (
     isset($_GET['action'], $_GET['id']) &&
     $_GET['action'] === 'approve'
@@ -62,6 +64,7 @@ if (
     exit;
 }
 
+// create new application (student)
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $error = $controller->create($currentUser, $_POST);
 
