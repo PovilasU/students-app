@@ -1,319 +1,214 @@
-# Studentų paraiškų valdymo sistema (PHP + SQLite)
+# Studentų Paraiškų Valdymo Sistema (PHP + SQLite)
 
-Šis projektas yra pilnai funkcionuojanti studentų paraiškų valdymo sistema, sukurta naudojant **gryną PHP**, **SQLite**, aiškią **sluoksninę architektūrą** ir papildytas **saugumo mechanizmais** (PDO, CSRF, rate limiting, XSS prevencija, sesijų apsauga).
+Ši sistema yra pilnai funkcionuojama demonstracinė paraiškų valdymo aplikacija, sukurta naudojant **gryną PHP**, **SQLite**, **MVC-like struktūrą**, **Repository + Service** sluoksnius ir įdiegtas modernias **saugumo priemones** (CSRF, XSS apsauga, Login rate limiting, SQL injection prevencija).
 
-README parengtas taip, kad galėtum juo remtis pristatydamas projektą darbdaviui.
+README paruoštas taip, kad galėtum juo sėkmingai pristatyti projektą darbdaviui.
 
 ---
 
-## 1. Funkcionalumas
+# 🧱 1. Funkcionalumas
 
-### Studentas gali:
+## 👩‍🎓 Studentas gali:
 
 - Registruotis sistemoje
-- Prisijungti su el. paštu ir slaptažodžiu
-- Kurti naujas paraiškas (**ruošiniai**)
+- Prisijungti su el. paštu
+- Kurti naujas paraiškas (ruošinius)
 - Redaguoti ruošinius
-- Pateikti paraiškas (**pateikta**)
-- Negali pateikti daugiau kaip **3 vieno tipo pateiktų paraiškų**
-- Matyti administratoriaus atmetimo komentarus (**atmestos paraiškos**)
+- Pateikti paraiškas („Pateikta“)
+- Negalima turėti daugiau nei **3 pateiktų paraiškų** to paties tipo
+- Matyti atmetimo komentarus iš administratoriaus
 
-### Administratorius gali:
+## 🧑‍💼 Administratorius gali:
 
 - Prisijungti
-- Peržiūrėti visas paraiškas
-- Patvirtinti paraiškas (**patvirtinta**)
-- Atmesti paraiškas su **privalomu komentaru**
+- Matyti visas paraiškas
+- Patvirtinti paraišką („Patvirtinta“)
+- Atmesti paraišką su privalomu komentaru
 
 ---
 
-## 2. Architektūra (Controller → Service → Repository + View)
+# 🏗️ 2. Architektūra
 
-Projektas suskirstytas į aiškius sluoksnius:
+Projekto struktūra paremta aiškiais sluoksniais:
 
-```text
-public/ (entry points)
-  → Controller (ApplicationController)
-    → Service (ApplicationService)
-      → Repository (ApplicationRepository)
-        → DB (SQLite per PDO)
+```
+public/ (routing)
+    → Controller
+        → Service
+            → Repository
+                → SQLite DB
 
-            ↓
-
-          View (HTML šablonai views/)
+views/
+    → HTML šablonai
 ```
 
-### Controller sluoksnis
+Kiekvienas sluoksnis turi aiškią atsakomybę:
 
-Failas: `src/ApplicationController.php`
+### ✔ Controller
 
-- priima duomenis iš `public/applications/*.php`
-- kviečia `ApplicationService`
-- paruošia duomenis `View` šablonams
+- Apdoroja HTTP request'us
+- Kviečia Service logiką
+- Paduoda duomenis View šablonams
 
-Pavyzdys: `ApplicationController::submit()` kviečia `ApplicationService::submitDraftForStudent()`.
+### ✔ Service (verslo logika)
 
-### Service sluoksnis
+- Taisyklė: max 3 submitted paraiškos per tipą
+- Statusų keitimas: draft → submitted → approved / rejected
+- Validacijos
+- Rate limiting ruošinių spamui
 
-Failas: `src/ApplicationService.php`
+### ✔ Repository (duomenų sluoksnis)
 
-- įgyvendina verslo taisykles:
-  - „max 3 submitted per tipo“
-  - ar studentas gali redaguoti konkretų ruošinį
-  - statusų keitimą (`draft` → `submitted` → `approved/rejected`)
-- atskirtas nuo DB – dirba per `ApplicationRepository`.
+- SQL užklausos
+- PDO prepared statements
+- Grąžina duomenis Servisui
 
-### Repository sluoksnis
+### ✔ View
+
+- Tik HTML + PHP echo
+- Duomenys atvaizduojami saugiai per `htmlspecialchars`
+
+---
+
+# 🧬 3. SOLID principai
+
+### SRP (Single Responsibility Principle)
+
+- Kiekviena klasė turi vieną atsakomybę:
+  - Controller – request srautas
+  - Service – taisyklės/verslo logika
+  - Repository – SQL užklausos
+  - View – tik HTML
+
+### DIP (Dependency Inversion Principle)
+
+- Service gauna Repository per konstruktorių
+- Controller gauna Service per konstruktorių
+- Leidžia lengvai testuoti ir keisti implementacijas
+
+---
+
+# 🧩 4. Naudoti Design Pattern'ai
+
+### ✔ Repository Pattern
 
 Failas: `src/ApplicationRepository.php`
 
-- kapsuliuoja SQL užklausas:
-  - `findById`
-  - `findAllForStudent`
-  - `findAll`
-  - `countSubmittedByTypeForStudent`
-  - `updateStatus`
-  - `updateStatusAndComment`
-  - `countRecentDraftsForStudent`
-- naudojamas PDO `prepare/execute` (saugiau už `query` su kintamaisiais).
+Privalumai:
 
-### View sluoksnis
+- SQL sukoncentruotas vienoje vietoje
+- Service sluoksnis nežino, kaip veikia DB
+- Lengva pakeisti DB (pvz. į MySQL)
 
-Katalogas: `views/applications/`
+### ✔ Service Layer Pattern
 
-- `list.php` – sąrašas + forma naujai paraiškai
-- `edit.php` – ruošinio redagavimas
-- `reject.php` – atmetimo forma
+Failas: `src/ApplicationService.php`
 
-HTML atskirtas nuo logikos (Controller/Service neturi HTML).
+Privalumai:
 
----
+- Verslo taisyklės nepririštos prie UI ar DB
+- Gali būti testuojama be naršyklės
+- Controller išlieka „plonas“
 
-## 3. SOLID principai
+### ✔ MVC-like View Rendering
 
-### SRP – Single Responsibility Principle
+Failai: `views/applications/*.php`
 
-Kiekvienas sluoksnis turi vieną atsakomybę:
+Privalumai:
 
-- Controller – request‘ų valdymas
-- Service – verslo taisyklės
-- Repository – duomenų prieiga
-- View – atvaizdavimas (HTML)
-
-### DIP – Dependency Inversion Principle
-
-Priklausomybės tiekiamos per konstruktorių:
-
-- `ApplicationController` gauna `ApplicationService`
-- `ApplicationService` gauna `ApplicationRepository`
-- `ApplicationRepository` gauna `PDO`
-
-Tai leidžia lengvai keisti implementacijas (pvz., testuose naudoti in-memory SQLite).
-
-Kiti SOLID principai (OCP, LSP, ISP) išplaukia iš tokio atsakomybių atskyrimo – sluoksniai nėra „perkrauti“ funkcionalumu.
+- Aiškiai atskirtas HTML nuo logikos
+- Lengva prižiūrėti UI
 
 ---
 
-## 4. Naudoti design pattern'ai
+# 🔐 5. Saugumo priemonės
 
-### Repository Pattern
+### 5.1 SQL Injection apsauga
 
-**Kur:** `src/ApplicationRepository.php`  
-**Kodėl:**
+- Visi SQL vykdomi su `prepare() + execute()`
+- `PDO::ATTR_EMULATE_PREPARES = false`
 
-- visi SQL klausimai sukoncentruoti vienoje vietoje;
-- Service/Controller nesirūpina DB detalėmis;
-- galima pakeisti SQLite į MySQL/kitą DB, nekeičiat Controller/Service.
+### 5.2 XSS apsauga
 
-Pavyzdiniai metodai:
+- Visi HTML išvedami per:
+  ```php
+  htmlspecialchars($value, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8')
+  ```
 
-- `countSubmittedByTypeForStudent(int $studentId, string $type): int`
-- `updateStatus(int $id, string $status): void`
-- `updateStatusAndComment(int $id, string $status, string $comment): void`
-
-### Service Layer Pattern
-
-**Kur:** `src/ApplicationService.php`  
-**Kodėl:**
-
-- verslo logika atskirta nuo HTTP ir DB;
-- lengviau testuoti (`ApplicationServiceTest.php`);
-- Controller tampa „plonas“ – atsako tik už srautą.
-
-Pavyzdiniai metodai:
-
-- `createDraftForStudent(...)`
-- `submitDraftForStudent(...)`
-- `approveSubmittedByAdmin(int $id)`
-- `rejectWithComment(int $id, string $comment)`
-- `getApplicationsForUser(array $user)`
-
-### MVC-like struktūra
-
-**Kur:** `public/applications/*.php` + `ApplicationController` + `views/applications/*.php`
-
-- public endpoint → controller → service → repository → view;
-- HTML niekada nerašomas service/repository sluoksnyje.
-
----
-
-## 5. Saugumas
-
-### 5.1. Apsauga nuo SQL Injection
-
-- Naudojamas **PDO** su `prepare()` / `execute()` visoms užklausoms.
-- Nenaudojami string'ų sujungimai kaip `"... WHERE id=$id"` – vietoje to parametrai:
-  - `:id`, `:student_id`, `:email` ir t. t.
-- `db.php` nustatytas:
-  - `PDO::ATTR_ERRMODE = PDO::ERRMODE_EXCEPTION`
-  - `PDO::ATTR_DEFAULT_FETCH_MODE = PDO::FETCH_ASSOC`
-  - `PDO::ATTR_EMULATE_PREPARES = false`
-
-### 5.2. Apsauga nuo XSS (Cross-Site Scripting)
-
-- Visos dinamiškai rodomos reikšmės šablonuose (`*.php` view) yra apgaubiamos:
-  - `htmlspecialchars($value, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8')`
-
-Pvz.:
-
-```php
-<td><?php echo htmlspecialchars($app['title'], ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8'); ?></td>
-```
-
-Taip naršyklei neleidžiama traktuoti įvedamo teksto kaip HTML/JS.
-
-### 5.3. CSRF apsauga formoms
+### 5.3 CSRF apsauga POST formoms
 
 Failas: `src/csrf.php`
 
-```php
-function csrf_token(): string
-{
-    if (empty($_SESSION['csrf_token'])) {
-        $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
-    }
-    return $_SESSION['csrf_token'];
-}
-
-function csrf_verify(?string $token): bool
-{
-    return isset($_SESSION['csrf_token']) && is_string($token) && hash_equals($_SESSION['csrf_token'], $token);
-}
-```
-
-Kiekviena POST forma (login, register, create, edit, reject) turi:
+Formose:
 
 ```html
 <input type="hidden" name="csrf_token" value="<?php echo csrf_token(); ?>" />
 ```
 
-O request apdorojime:
+Tikrinimas:
 
 ```php
-$token = $_POST['csrf_token'] ?? null;
-if (!csrf_verify($token)) {
-    $error = 'Neteisingas saugumo žetonas. Perkraukite puslapį ir bandykite dar kartą.';
-}
+if (!csrf_verify($_POST['csrf_token'] ?? null)) { ... }
 ```
 
-### 5.4. Login „rate limiting“
+### 5.4 Login Rate Limiting (anti-bruteforce)
 
-Login puslapyje (`public/login.php`):
+- 5 nesėkmingi bandymai per 5 min → blokavimas
+- Po sėkmingo login:
+  ```php
+  session_regenerate_id(true);
+  ```
 
-- naudojamas `$_SESSION['login_attempts']` ir `$_SESSION['login_last_attempt']`;
-- jei yra per daug nesėkmingų bandymų per trumpą laiką (pvz. 5 bandymai per 5 minutes), vartotojas gauna klaidą:
-  - „Per daug nesėkmingų bandymų. Bandykite dar kartą po kelių minučių.“
+### 5.5 Paraiškų kūrimo anti-spam (Service sluoksnyje)
 
-Po sėkmingo prisijungimo:
-
-```php
-session_regenerate_id(true);
-$_SESSION['user_id'] = $user['id'];
-$_SESSION['login_attempts'] = 0;
-```
-
-### 5.5. Spamo / flood apsauga kuriant paraiškas
-
-`ApplicationRepository`:
-
-```php
-public function countRecentDraftsForStudent(int $studentId, int $seconds): int
-{
-    $stmt = $this->pdo->prepare("
-        SELECT COUNT(*)
-        FROM applications
-        WHERE student_id = :sid
-          AND created_at >= :since
-    ");
-    $stmt->execute([
-        ':sid' => $studentId,
-        ':since' => date('Y-m-d H:i:s', time() - $seconds),
-    ]);
-
-    return (int)$stmt->fetchColumn();
-}
-```
-
-`ApplicationService::createDraftForStudent(...)`:
-
-```php
-if ($this->repository->countRecentDraftsForStudent($studentId, 60) >= 5) {
-    return 'Per daug bandymų sukurti paraiškas. Palaukite minutę ir bandykite vėl.';
-}
-```
-
-### 5.6. Sesijų apsauga
-
-- `session_regenerate_id(true)` po sėkmingo prisijungimo.
-- Tikrinama, ar vartotojas egzistuoja DB, prieš laikant jį prisijungusiu.
+- Maks. 5 ruošiniai per 60 sekundžių
 
 ---
 
-## 6. Testai
+# 🧪 6. Testavimas (PHPUnit)
 
-Projektas turi **unit testus** su **PHPUnit**, kurie tikrina:
+Sistema turi testus, kurie tikrina:
 
-- verslo taisyklę: „max 3 submitted paraiškos vieno tipo studentui“
-- statusų keitimą:
-  - `submitted → approved`
-  - `submitted → rejected` (su atmetimo komentaru)
-- validaciją kuriant ruošinį
+### ✔ verslo logiką:
 
-Failai:
+- ruošinio kūrimą
+- validaciją
+- draft → submitted
+- submitted → approved
+- submitted → rejected (su komentaru)
+- max 3 submitted per tipą
+- rate limiting ruošinių kūrimui
 
-- `tests/bootstrap.php`
-- `tests/ApplicationServiceTest.php`
-- `phpunit.xml`
+Testai naudoja in-memory SQLite:
 
-Testai naudoja **in-memory SQLite** (`sqlite::memory:`), todėl nekeičia `data/app.sqlite`.
+```
+sqlite::memory:
+```
 
-### Testų paleidimas
+### ▶ Testų paleidimas
 
-```bash
+```
 composer install
 vendor/bin/phpunit
 ```
 
-Tikėtinas rezultatas:
+Laukiamas rezultatas:
 
-```text
-OK (4 tests, 8 assertions)
+```
+OK (8 tests, 20 assertions)
 ```
 
 ---
 
-## 7. Projekto struktūra
+# 📁 7. Projekto struktūra
 
-```text
+```
 students-app/
 │
 ├── public/
-│   ├── index.php
 │   ├── login.php
 │   ├── register.php
 │   ├── logout.php
-│   ├── css/
-│   │   └── water.css
 │   └── applications/
 │       ├── index.php
 │       ├── edit.php
@@ -322,11 +217,10 @@ students-app/
 ├── src/
 │   ├── db.php
 │   ├── View.php
+│   ├── csrf.php
 │   ├── ApplicationRepository.php
 │   ├── ApplicationService.php
 │   ├── ApplicationController.php
-│   ├── csrf.php
-│   └── helpers.php (pvz. `e()` HTML escape funkcijai)
 │
 ├── views/
 │   └── applications/
@@ -335,60 +229,66 @@ students-app/
 │       └── reject.php
 │
 ├── tests/
-│   ├── bootstrap.php
-│   └── ApplicationServiceTest.php
+│   ├── ApplicationServiceTest.php
+│   └── bootstrap.php
 │
 ├── data/
 │   └── app.sqlite
 │
 ├── composer.json
-├── composer.lock
 ├── phpunit.xml
 └── README.md
 ```
 
 ---
 
-## 8. Paleidimo instrukcijos
+# ▶️ 8. Paleidimas lokaliai
 
-1. Paleisti PHP serverį:
+1. Įdiegti dependencies:
 
-```bash
+```
+composer install
+```
+
+2. Paleisti serverį:
+
+```
 php -S localhost:8000 -t public
 ```
 
-2. Atidaryti naršyklėje:
+3. Atidaryti naršyklę:
 
-```text
+```
 http://localhost:8000/
 ```
 
-3. Duomenų bazės failas sukuriamas automatiškai:
+Vartotojai automatiškai sukuriami:
 
-```text
-data/app.sqlite
-```
-
----
-
-## 9. Ką daryčiau kitaip, jei turėčiau daugiau laiko?
-
-- Įdėčiau **Composer autoloading pagal PSR-4** ir pašalinčiau `require` iš PHP failų.
-- Sukurčiau atskirą **routerio sluoksnį** (`/index.php` → router → controller).
-- Dar labiau išskaidyčiau statusų logiką naudojant **State pattern** (ApplicationStatus objektai).
-- Parašyčiau daugiau testų:
-  - integracinių testų Controller/View sluoksniams,
-  - testų autentifikacijai (login/registration).
-- Įdėčiau **Docker** (`Dockerfile + docker-compose.yml`) lengvam paleidimui įvairiose aplinkose.
-- Pridėčiau REST API (`/api/applications`, `/api/login`) ir galimą SPA front-end (React/Vue).
-- Sukurčiau gražesnį UI su Bootstrap/Tailwind (nors pagal užduotį dizainas nėra vertinimo kriterijus).
+| Rolė             | El. paštas          | Slaptažodis |
+| ---------------- | ------------------- | ----------- |
+| Studentas        | student@example.com | student123  |
+| Administratorius | admin@example.com   | admin123    |
 
 ---
 
-## 10. Autorius
+# 🚀 9. Ką būtų galima patobulinti ateityje
 
-Įrašyk:
+- Pilnas Router sluoksnis vietoje `public/*.php`
+- PSR-4 Autoloading vietoje require
+- State Pattern statusų valdymui
+- REST API (`/api/...`)
+- Docker konteinerizacija
+- Daugiau integracinių testų
+- UI pagerinimas (Bootstrap / Tailwind)
 
-- Vardas Pavardė
-- GitHub profilis
-- El. paštas
+---
+
+# 👤 10. Autorius
+
+Įrašyk savo duomenis:
+
+- **Vardas Pavardė**
+- **El. paštas**
+- **GitHub profilis**
+
+---
