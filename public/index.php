@@ -22,6 +22,9 @@ if ($currentUser === null) {
     exit;
 }
 
+$flashError = $_SESSION['flash_error'] ?? null;
+unset($_SESSION['flash_error']);
+
 // student submit
 if (
     isset($_GET['action'], $_GET['id']) &&
@@ -32,16 +35,45 @@ if (
 
     if ($id > 0) {
         $stmt = $pdo->prepare("
-            UPDATE applications
-            SET status = 'submitted'
+            SELECT id, type
+            FROM applications
             WHERE id = :id
-              AND status = 'draft'
               AND student_id = :student_id
+              AND status = 'draft'
         ");
         $stmt->execute([
             ':id' => $id,
             ':student_id' => $currentUser['id'],
         ]);
+        $app = $stmt->fetch(PDO::FETCH_ASSOC);
+
+        if ($app) {
+            $countStmt = $pdo->prepare("
+                SELECT COUNT(*)
+                FROM applications
+                WHERE student_id = :student_id
+                  AND type = :type
+                  AND status = 'submitted'
+            ");
+            $countStmt->execute([
+                ':student_id' => $currentUser['id'],
+                ':type' => $app['type'],
+            ]);
+            $submittedCount = (int)$countStmt->fetchColumn();
+
+            if ($submittedCount >= 3) {
+                $_SESSION['flash_error'] = 'Jau turite 3 pateiktas šio tipo paraiškas.';
+            } else {
+                $updateStmt = $pdo->prepare("
+                    UPDATE applications
+                    SET status = 'submitted'
+                    WHERE id = :id
+                ");
+                $updateStmt->execute([
+                    ':id' => $id,
+                ]);
+            }
+        }
     }
 
     header('Location: index.php');
@@ -145,6 +177,10 @@ $applications = $applicationsStmt->fetchAll(PDO::FETCH_ASSOC);
         (<?php echo htmlspecialchars($currentUser['role']); ?>)
         | <a href="logout.php">Atsijungti</a>
     </p>
+
+    <?php if ($flashError !== null): ?>
+        <p style="color: red;"><?php echo htmlspecialchars($flashError); ?></p>
+    <?php endif; ?>
 
     <?php if ($currentUser['role'] === 'student'): ?>
         <h2>Nauja paraiška</h2>
