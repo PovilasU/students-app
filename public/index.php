@@ -25,7 +25,7 @@ if ($currentUser === null) {
 $flashError = $_SESSION['flash_error'] ?? null;
 unset($_SESSION['flash_error']);
 
-// student submit
+// student submit with max 3 submitted per type
 if (
     isset($_GET['action'], $_GET['id']) &&
     $_GET['action'] === 'submit' &&
@@ -80,25 +80,22 @@ if (
     exit;
 }
 
-// admin approve/reject
+// admin approve only
 if (
     isset($_GET['action'], $_GET['id']) &&
-    $currentUser['role'] === 'admin'
+    $currentUser['role'] === 'admin' &&
+    $_GET['action'] === 'approve'
 ) {
     $id = (int)$_GET['id'];
-    $action = $_GET['action'];
 
-    if ($id > 0 && in_array($action, ['approve', 'reject'], true)) {
-        $newStatus = $action === 'approve' ? 'approved' : 'rejected';
-
+    if ($id > 0) {
         $stmt = $pdo->prepare("
             UPDATE applications
-            SET status = :status
+            SET status = 'approved'
             WHERE id = :id
               AND status = 'submitted'
         ");
         $stmt->execute([
-            ':status' => $newStatus,
             ':id' => $id,
         ]);
     }
@@ -109,6 +106,7 @@ if (
 
 $error = null;
 
+// create new application (student only)
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if ($currentUser['role'] !== 'student') {
         $error = 'Only students can create applications.';
@@ -140,15 +138,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 }
 
+// test table debug
 $stmt = $pdo->prepare("INSERT INTO test (created_at) VALUES (:created_at)");
 $stmt->execute([
     ':created_at' => date('Y-m-d H:i:s'),
 ]);
 $testCount = (int)$pdo->query("SELECT COUNT(*) FROM test")->fetchColumn();
 
+// load applications list
 if ($currentUser['role'] === 'student') {
     $applicationsStmt = $pdo->prepare("
-        SELECT id, title, type, status, created_at
+        SELECT id, title, type, status, created_at, rejection_comment
         FROM applications
         WHERE student_id = :student_id
         ORDER BY created_at DESC
@@ -156,7 +156,7 @@ if ($currentUser['role'] === 'student') {
     $applicationsStmt->execute([':student_id' => $currentUser['id']]);
 } else {
     $applicationsStmt = $pdo->query("
-        SELECT id, title, type, status, created_at
+        SELECT id, title, type, status, created_at, rejection_comment
         FROM applications
         ORDER BY created_at DESC
     ");
@@ -234,6 +234,7 @@ $applications = $applicationsStmt->fetchAll(PDO::FETCH_ASSOC);
                     <th>Tipas</th>
                     <th>Statusas</th>
                     <th>Sukurta</th>
+                    <th>Atmetimo komentaras</th>
                     <th>Veiksmai</th>
                 </tr>
             </thead>
@@ -246,6 +247,13 @@ $applications = $applicationsStmt->fetchAll(PDO::FETCH_ASSOC);
                     <td><?php echo htmlspecialchars($app['status']); ?></td>
                     <td><?php echo htmlspecialchars($app['created_at']); ?></td>
                     <td>
+                        <?php
+                        if ($app['status'] === 'rejected' && $app['rejection_comment'] !== null) {
+                            echo htmlspecialchars($app['rejection_comment']);
+                        }
+                        ?>
+                    </td>
+                    <td>
                         <?php if ($currentUser['role'] === 'student' && $app['status'] === 'draft'): ?>
                             <a href="edit_application.php?id=<?php echo (int)$app['id']; ?>">Redaguoti</a>
                             |
@@ -253,12 +261,11 @@ $applications = $applicationsStmt->fetchAll(PDO::FETCH_ASSOC);
                         <?php elseif ($currentUser['role'] === 'admin' && $app['status'] === 'submitted'): ?>
                             <a href="index.php?action=approve&id=<?php echo (int)$app['id']; ?>">Patvirtinti</a>
                             |
-                            <a href="index.php?action=reject&id=<?php echo (int)$app['id']; ?>">Atmesti</a>
+                            <a href="reject_application.php?id=<?php echo (int)$app['id']; ?>">Atmesti</a>
                         <?php else: ?>
                             -
                         <?php endif; ?>
                     </td>
-
                 </tr>
             <?php endforeach; ?>
             </tbody>

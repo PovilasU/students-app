@@ -82,7 +82,15 @@ function initApplicationsTable(): void
     ";
 
     $pdo->exec($sql);
+
+    try {
+        // add column if not exists
+        $pdo->exec("ALTER TABLE applications ADD COLUMN rejection_comment TEXT");
+    } catch (PDOException $e) {
+        // ignore
+    }
 }
+
 
 function findUserById(int $id): ?array
 {
