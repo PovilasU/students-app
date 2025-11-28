@@ -1,0 +1,370 @@
+<!DOCTYPE html>
+<html lang="lt">
+  <head>
+    <meta charset="UTF-8" />
+    <title>API Demo – Paraiškų sistema</title>
+    <link rel="stylesheet" href="/css/water.css" />
+    <style>
+      .hidden {
+        display: none;
+      }
+      .error {
+        color: red;
+      }
+      .success {
+        color: green;
+      }
+      table {
+        width: 100%;
+      }
+      th,
+      td {
+        white-space: nowrap;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>API Demo – Paraiškų sistema</h1>
+
+    <section id="login-section">
+      <h2>Prisijungimas per API</h2>
+      <p class="error" id="login-error"></p>
+      <form id="login-form">
+        <label>
+          El. paštas:
+          <input
+            type="email"
+            name="email"
+            required
+            value="student@example.com"
+          />
+        </label>
+        <br />
+        <label>
+          Slaptažodis:
+          <input type="password" name="password" required value="student123" />
+        </label>
+        <br />
+        <button type="submit">Prisijungti</button>
+      </form>
+    </section>
+
+    <section id="app-section" class="hidden">
+      <p>
+        Prisijungęs: <strong id="user-name"></strong> (<span
+          id="user-role"
+        ></span
+        >) | <button id="logout-btn">Atsijungti (tik frontend'e)</button>
+      </p>
+
+      <p class="error" id="app-error"></p>
+      <p class="success" id="app-success"></p>
+
+      <h2>Nauja paraiška (per API)</h2>
+      <form id="create-form">
+        <label>
+          Pavadinimas:
+          <input type="text" name="title" required /> </label
+        ><br />
+        <label>
+          Tipas:
+          <input type="text" name="type" required value="Stipendija" /> </label
+        ><br />
+        <label>
+          Aprašymas:<br />
+          <textarea name="description" rows="3" required></textarea></label
+        ><br />
+        <button type="submit">Sukurti ruošinį</button>
+      </form>
+
+      <h2>Paraiškų sąrašas (API)</h2>
+      <button id="reload-btn">Perkrauti sąrašą</button>
+      <div id="applications-container"></div>
+    </section>
+
+    <script>
+      const STATUS_LABELS = {
+        draft: "Ruošinys",
+        submitted: "Pateikta",
+        approved: "Patvirtinta",
+        rejected: "Atmesta",
+      };
+
+      let currentUser = null;
+
+      async function apiRequest(method, url, body) {
+        const options = {
+          method,
+          headers: {},
+        };
+        if (body !== undefined && body !== null) {
+          options.headers["Content-Type"] = "application/json";
+          options.body = JSON.stringify(body);
+        }
+
+        const response = await fetch(url, options);
+        const data = await response.json().catch(() => ({}));
+
+        if (!response.ok) {
+          // bandome grąžinti klaidos tekstą iš body
+          const msg =
+            data && data.error
+              ? data.error
+              : "Nežinoma klaida (" + response.status + ")";
+          throw new Error(msg);
+        }
+
+        return data;
+      }
+
+      function setLoggedIn(user) {
+        currentUser = user;
+        document.getElementById("login-section").classList.add("hidden");
+        document.getElementById("app-section").classList.remove("hidden");
+        document.getElementById("user-name").textContent = user.name;
+        document.getElementById("user-role").textContent =
+          user.role === "student" ? "studentas" : "administratorius";
+      }
+
+      function setLoggedOut() {
+        currentUser = null;
+        document.getElementById("login-section").classList.remove("hidden");
+        document.getElementById("app-section").classList.add("hidden");
+        document.getElementById("login-error").textContent = "";
+        document.getElementById("app-error").textContent = "";
+        document.getElementById("app-success").textContent = "";
+      }
+
+      async function loadApplications() {
+        if (!currentUser) return;
+
+        const container = document.getElementById("applications-container");
+        container.innerHTML = "Kraunama...";
+
+        try {
+          const apps = await apiRequest("GET", "/api/applications.php");
+          if (!Array.isArray(apps)) {
+            container.textContent = "Neteisingas API atsakymas.";
+            return;
+          }
+
+          if (apps.length === 0) {
+            container.textContent = "Paraiškų nėra.";
+            return;
+          }
+
+          const table = document.createElement("table");
+          const thead = document.createElement("thead");
+          thead.innerHTML = `
+            <tr>
+                <th>ID</th>
+                <th>Pavadinimas</th>
+                <th>Tipas</th>
+                <th>Statusas</th>
+                <th>Sukurta</th>
+                <th>Atmetimo komentaras</th>
+                <th>Veiksmai</th>
+            </tr>
+        `;
+          table.appendChild(thead);
+
+          const tbody = document.createElement("tbody");
+
+          apps.forEach((app) => {
+            const tr = document.createElement("tr");
+
+            tr.innerHTML = `
+                <td>${app.id}</td>
+                <td>${escapeHtml(app.title)}</td>
+                <td>${escapeHtml(app.type)}</td>
+                <td>${escapeHtml(STATUS_LABELS[app.status] || app.status)}</td>
+                <td>${escapeHtml(app.created_at)}</td>
+                <td>${
+                  app.rejection_comment ? escapeHtml(app.rejection_comment) : ""
+                }</td>
+                <td></td>
+            `;
+
+            const actionsTd = tr.querySelector("td:last-child");
+
+            if (currentUser.role === "student" && app.status === "draft") {
+              const submitBtn = document.createElement("button");
+              submitBtn.textContent = "Pateikti";
+              submitBtn.onclick = () => submitApplication(app.id);
+              actionsTd.appendChild(submitBtn);
+            } else if (
+              currentUser.role === "admin" &&
+              app.status === "submitted"
+            ) {
+              const approveBtn = document.createElement("button");
+              approveBtn.textContent = "Patvirtinti";
+              approveBtn.onclick = () => approveApplication(app.id);
+              actionsTd.appendChild(approveBtn);
+
+              const rejectBtn = document.createElement("button");
+              rejectBtn.textContent = "Atmesti";
+              rejectBtn.onclick = () => rejectApplication(app.id);
+              actionsTd.appendChild(rejectBtn);
+            } else {
+              actionsTd.textContent = "-";
+            }
+
+            tbody.appendChild(tr);
+          });
+
+          table.appendChild(tbody);
+          container.innerHTML = "";
+          container.appendChild(table);
+        } catch (e) {
+          container.textContent = "Klaida kraunant sąrašą: " + e.message;
+        }
+      }
+
+      async function submitApplication(id) {
+        clearMessages();
+        try {
+          await apiRequest(
+            "PATCH",
+            "/api/applications.php?id=" + encodeURIComponent(id),
+            {
+              action: "submit",
+            }
+          );
+          document.getElementById("app-success").textContent =
+            "Paraiška pateikta.";
+          await loadApplications();
+        } catch (e) {
+          document.getElementById("app-error").textContent = e.message;
+        }
+      }
+
+      async function approveApplication(id) {
+        clearMessages();
+        try {
+          await apiRequest(
+            "PATCH",
+            "/api/applications.php?id=" + encodeURIComponent(id),
+            {
+              action: "approve",
+            }
+          );
+          document.getElementById("app-success").textContent =
+            "Paraiška patvirtinta.";
+          await loadApplications();
+        } catch (e) {
+          document.getElementById("app-error").textContent = e.message;
+        }
+      }
+
+      async function rejectApplication(id) {
+        clearMessages();
+        const comment = window.prompt("Įveskite atmetimo komentarą:");
+        if (comment === null) {
+          return;
+        }
+
+        try {
+          await apiRequest(
+            "PATCH",
+            "/api/applications.php?id=" + encodeURIComponent(id),
+            {
+              action: "reject",
+              comment: comment,
+            }
+          );
+          document.getElementById("app-success").textContent =
+            "Paraiška atmesta.";
+          await loadApplications();
+        } catch (e) {
+          document.getElementById("app-error").textContent = e.message;
+        }
+      }
+
+      function clearMessages() {
+        document.getElementById("app-error").textContent = "";
+        document.getElementById("app-success").textContent = "";
+      }
+
+      function escapeHtml(str) {
+        return String(str)
+          .replace(/&/g, "&amp;")
+          .replace(/</g, "&lt;")
+          .replace(/>/g, "&gt;")
+          .replace(/"/g, "&quot;")
+          .replace(/'/g, "&#039;");
+      }
+
+      // Event listeners
+
+      document
+        .getElementById("login-form")
+        .addEventListener("submit", async (e) => {
+          e.preventDefault();
+          document.getElementById("login-error").textContent = "";
+          const form = e.target;
+          const email = form.email.value;
+          const password = form.password.value;
+
+          try {
+            const data = await apiRequest("POST", "/api/login.php", {
+              email,
+              password,
+            });
+            if (!data.success) {
+              document.getElementById("login-error").textContent =
+                data.error || "Nepavyko prisijungti.";
+              return;
+            }
+            setLoggedIn(data.user);
+            await loadApplications();
+          } catch (err) {
+            document.getElementById("login-error").textContent = err.message;
+          }
+        });
+
+      document
+        .getElementById("create-form")
+        .addEventListener("submit", async (e) => {
+          e.preventDefault();
+          clearMessages();
+          if (!currentUser) return;
+
+          const form = e.target;
+          const payload = {
+            title: form.title.value,
+            type: form.type.value,
+            description: form.description.value,
+          };
+
+          try {
+            const data = await apiRequest(
+              "POST",
+              "/api/applications.php",
+              payload
+            );
+            if (!data.success) {
+              document.getElementById("app-error").textContent =
+                data.error || "Nepavyko sukurti paraiškos.";
+              return;
+            }
+            document.getElementById("app-success").textContent =
+              data.message || "Paraiška sukurta.";
+            form.reset();
+            await loadApplications();
+          } catch (err) {
+            document.getElementById("app-error").textContent = err.message;
+          }
+        });
+
+      document.getElementById("reload-btn").addEventListener("click", () => {
+        clearMessages();
+        loadApplications();
+      });
+
+      document.getElementById("logout-btn").addEventListener("click", () => {
+        // čia tiesiog išvalom frontend'o būseną (serverio sesija lieka)
+        setLoggedOut();
+      });
+    </script>
+  </body>
+</html>
