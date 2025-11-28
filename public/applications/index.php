@@ -4,6 +4,7 @@ session_start();
 require __DIR__ . '/../../src/db.php';
 require __DIR__ . '/../../src/ApplicationRepository.php';
 require __DIR__ . '/../../src/ApplicationService.php';
+require __DIR__ . '/../../src/ApplicationController.php';
 
 initDatabase();
 initUsersTable();
@@ -12,6 +13,7 @@ initApplicationsTable();
 $pdo = getPDO();
 $repository = new ApplicationRepository($pdo);
 $service = new ApplicationService($repository);
+$controller = new ApplicationController($service);
 
 if (!isset($_SESSION['user_id'])) {
     header('Location: ../login.php');
@@ -31,62 +33,46 @@ unset($_SESSION['flash_error']);
 
 $error = null;
 
-// student submit
+// submit
 if (
     isset($_GET['action'], $_GET['id']) &&
-    $_GET['action'] === 'submit' &&
-    $currentUser['role'] === 'student'
+    $_GET['action'] === 'submit'
 ) {
     $id = (int)$_GET['id'];
 
-    if ($id > 0) {
-        $err = $service->submitDraftForStudent($id, (int)$currentUser['id']);
-        if ($err !== null) {
-            $_SESSION['flash_error'] = $err;
-        }
+    $err = $controller->submit($currentUser, $id);
+    if ($err !== null) {
+        $_SESSION['flash_error'] = $err;
     }
 
     header('Location: index.php');
     exit;
 }
 
-// admin approve
+// approve
 if (
     isset($_GET['action'], $_GET['id']) &&
-    $_GET['action'] === 'approve' &&
-    $currentUser['role'] === 'admin'
+    $_GET['action'] === 'approve'
 ) {
     $id = (int)$_GET['id'];
 
-    if ($id > 0) {
-        $service->approveSubmittedByAdmin($id);
-    }
+    $controller->approve($currentUser, $id);
 
     header('Location: index.php');
     exit;
 }
 
-// create new application (student only)
+// create
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    if ($currentUser['role'] !== 'student') {
-        $error = 'Only students can create applications.';
-    } else {
-        $title = trim($_POST['title'] ?? '');
-        $description = trim($_POST['description'] ?? '');
-        $type = trim($_POST['type'] ?? '');
+    $error = $controller->create($currentUser, $_POST);
 
-        $result = $service->createDraftForStudent((int)$currentUser['id'], $title, $description, $type);
-
-        if ($result !== null) {
-            $error = $result;
-        } else {
-            header('Location: index.php');
-            exit;
-        }
+    if ($error === null) {
+        header('Location: index.php');
+        exit;
     }
 }
 
-$applications = $service->getApplicationsForUser($currentUser);
+$applications = $controller->list($currentUser);
 ?>
 <!DOCTYPE html>
 <html lang="lt">

@@ -4,6 +4,7 @@ session_start();
 require __DIR__ . '/../../src/db.php';
 require __DIR__ . '/../../src/ApplicationRepository.php';
 require __DIR__ . '/../../src/ApplicationService.php';
+require __DIR__ . '/../../src/ApplicationController.php';
 
 initDatabase();
 initUsersTable();
@@ -12,6 +13,7 @@ initApplicationsTable();
 $pdo = getPDO();
 $repository = new ApplicationRepository($pdo);
 $service = new ApplicationService($repository);
+$controller = new ApplicationController($service);
 
 if (!isset($_SESSION['user_id'])) {
     header('Location: ../login.php');
@@ -31,20 +33,20 @@ if ($id <= 0) {
     exit;
 }
 
-$application = $service->getSubmittedForRejection($id);
-if (!$application) {
-    header('Location: index.php');
-    exit;
-}
-
 $error = null;
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    $comment = trim($_POST['rejection_comment'] ?? '');
-
-    $error = $service->rejectWithComment($application['id'], $comment);
+    $error = $controller->reject($currentUser, $id, $_POST);
 
     if ($error === null) {
+        header('Location: index.php');
+        exit;
+    }
+
+    $application = $controller->getRejectData($currentUser, $id);
+} else {
+    $application = $controller->getRejectData($currentUser, $id);
+    if (!$application) {
         header('Location: index.php');
         exit;
     }

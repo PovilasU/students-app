@@ -4,6 +4,7 @@ session_start();
 require __DIR__ . '/../../src/db.php';
 require __DIR__ . '/../../src/ApplicationRepository.php';
 require __DIR__ . '/../../src/ApplicationService.php';
+require __DIR__ . '/../../src/ApplicationController.php';
 
 initDatabase();
 initUsersTable();
@@ -12,6 +13,7 @@ initApplicationsTable();
 $pdo = getPDO();
 $repository = new ApplicationRepository($pdo);
 $service = new ApplicationService($repository);
+$controller = new ApplicationController($service);
 
 if (!isset($_SESSION['user_id'])) {
     header('Location: ../login.php');
@@ -31,35 +33,28 @@ if ($id <= 0) {
     exit;
 }
 
-$application = $service->getDraftForEditing($id, (int)$currentUser['id']);
-if (!$application) {
-    header('Location: index.php');
-    exit;
-}
-
 $error = null;
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    $title = trim($_POST['title'] ?? '');
-    $description = trim($_POST['description'] ?? '');
-    $type = trim($_POST['type'] ?? '');
-
-    $error = $service->updateDraftForStudent(
-        $application['id'],
-        (int)$currentUser['id'],
-        $title,
-        $description,
-        $type
-    );
+    $error = $controller->updateEdit($currentUser, $id, $_POST);
 
     if ($error === null) {
         header('Location: index.php');
         exit;
     }
 
-    $application['title'] = $title;
-    $application['description'] = $description;
-    $application['type'] = $type;
+    $application = [
+        'id' => $id,
+        'title' => trim($_POST['title'] ?? ''),
+        'description' => trim($_POST['description'] ?? ''),
+        'type' => trim($_POST['type'] ?? ''),
+    ];
+} else {
+    $application = $controller->getEditData($currentUser, $id);
+    if (!$application) {
+        header('Location: index.php');
+        exit;
+    }
 }
 ?>
 <!DOCTYPE html>
