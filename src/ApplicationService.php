@@ -62,7 +62,7 @@ class ApplicationService
             return;
         }
 
-        if ($app['status'] !== 'submitted') {
+        if ($app['status'] === 'approved') {
             return;
         }
 

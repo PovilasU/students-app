@@ -5,72 +5,106 @@ session_start();
 
 require __DIR__ . '/../src/db.php';
 require __DIR__ . '/../src/Router.php';
+require __DIR__ . '/../src/csrf.php';
+require __DIR__ . '/../src/View.php';
+require __DIR__ . '/../src/ApplicationRepository.php';
+require __DIR__ . '/../src/ApplicationService.php';
+require __DIR__ . '/../src/ApplicationController.php';
 
-// Kol kas – tik DB init, vėliau prikabinsim controllerius ir view
 initDatabase();
 initUsersTable();
 initApplicationsTable();
 
 $router = new Router();
 
-// Homepage: kol kas tiesiog redirect į /login
-$router->get('/', function () {
-    header('Location: /login.php');
+/**
+ * Helper: redirect
+ */
+function redirect(string $path): void {
+    header('Location: ' . $path);
     exit;
+}
+
+/**
+ * Helper: gauti prisijungusį vartotoją arba null
+ */
+function current_user(): ?array {
+    if (!isset($_SESSION['user_id'])) {
+        return null;
+    }
+    return findUserById((int)$_SESSION['user_id']);
+}
+
+/**
+ * Helper: sukurti controller + service + repo
+ */
+function make_application_controller(): ApplicationController {
+    $pdo = getPDO();
+    $repository = new ApplicationRepository($pdo);
+    $service = new ApplicationService($repository);
+    return new ApplicationController($service);
+}
+
+/**
+ * ROOT -> /login
+ */
+$router->get('/', function () {
+    redirect('/login');
 });
 
-// Testinis route, kad matytum, jog routeris veikia
+/**
+ * TEST ROUTE (gali palikti arba ištrinti vėliau)
+ */
 $router->get('/router-test', function () {
-    echo "<h1>Veikia!</h1>";
-    echo "<p>Jūs sėkmingai pasiekėte route <code>/router-test</code> per Router sluoksnį.</p>";
+    echo "<h1>Router works!</h1>";
+    echo "<p>Route: <code>/router-test</code></p>";
 });
 
-// LOGIN (GET) - rodo prisijungimo formą
+/**
+ * LOGIN (GET) – forma
+ */
 $router->get('/login', function () {
-    require __DIR__ . '/../src/View.php';
-    require __DIR__ . '/../src/csrf.php';
-    require __DIR__ . '/../src/db.php';
-
     $error = $_SESSION['login_error'] ?? null;
     unset($_SESSION['login_error']);
 
     include __DIR__ . '/../views/auth/login.php';
 });
 
-// LOGIN (POST) - apdoroja formą
+/**
+ * LOGIN (POST) – logika
+ */
 $router->post('/login', function () {
-    require __DIR__ . '/../src/db.php';
-    require __DIR__ . '/../src/csrf.php';
-
-    $token = $_POST['csrf_token'] ?? null;
-    if (!csrf_verify($token)) {
-        $_SESSION['login_error'] = 'Neteisingas saugumo žetonas.';
-        header('Location: /login');
-        exit;
-    }
-
     $email = trim($_POST['email'] ?? '');
     $password = $_POST['password'] ?? '';
+    $token = $_POST['csrf_token'] ?? null;
+
+    if (!csrf_verify($token)) {
+        $_SESSION['login_error'] = 'Neteisingas saugumo žetonas. Perkraukite puslapį ir bandykite dar kartą.';
+        redirect('/login');
+    }
+
+    if ($email === '' || $password === '') {
+        $_SESSION['login_error'] = 'Prašome įvesti el. paštą ir slaptažodį.';
+        redirect('/login');
+    }
 
     $user = findUserByEmail($email);
 
     if (!$user || !password_verify($password, $user['password_hash'])) {
         $_SESSION['login_error'] = 'Neteisingas el. paštas arba slaptažodis.';
-        header('Location: /login');
-        exit;
+        redirect('/login');
     }
 
     session_regenerate_id(true);
     $_SESSION['user_id'] = $user['id'];
 
-    header('Location: /applications');
-    exit;
+    redirect('/applications');
 });
 
-// REGISTER (GET) - rodo registracijos formą
+/**
+ * REGISTER (GET) – forma
+ */
 $router->get('/register', function () {
-    require __DIR__ . '/../src/csrf.php';
-
     $error = $_SESSION['register_error'] ?? null;
     $success = $_SESSION['register_success'] ?? null;
     unset($_SESSION['register_error'], $_SESSION['register_success']);
@@ -78,16 +112,14 @@ $router->get('/register', function () {
     include __DIR__ . '/../views/auth/register.php';
 });
 
-// REGISTER (POST) - apdoroja registracijos formą
+/**
+ * REGISTER (POST) – logika
+ */
 $router->post('/register', function () {
-    require __DIR__ . '/../src/db.php';
-    require __DIR__ . '/../src/csrf.php';
-
     $token = $_POST['csrf_token'] ?? null;
     if (!csrf_verify($token)) {
         $_SESSION['register_error'] = 'Neteisingas saugumo žetonas. Perkraukite puslapį ir bandykite dar kartą.';
-        header('Location: /register');
-        exit;
+        redirect('/register');
     }
 
     $name = trim($_POST['name'] ?? '');
@@ -97,20 +129,17 @@ $router->post('/register', function () {
 
     if ($name === '' || $email === '' || $password === '' || $password2 === '') {
         $_SESSION['register_error'] = 'Visi laukai yra privalomi.';
-        header('Location: /register');
-        exit;
+        redirect('/register');
     }
 
     if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
         $_SESSION['register_error'] = 'Neteisingas el. pašto formatas.';
-        header('Location: /register');
-        exit;
+        redirect('/register');
     }
 
     if ($password !== $password2) {
         $_SESSION['register_error'] = 'Slaptažodžiai nesutampa.';
-        header('Location: /register');
-        exit;
+        redirect('/register');
     }
 
     $hash = password_hash($password, PASSWORD_DEFAULT);
@@ -118,14 +147,144 @@ $router->post('/register', function () {
 
     if (!$created) {
         $_SESSION['register_error'] = 'Toks el. paštas jau egzistuoja.';
-        header('Location: /register');
-        exit;
+        redirect('/register');
     }
 
     $_SESSION['register_success'] = 'Registracija sėkminga. Dabar galite prisijungti.';
-    header('Location: /register');
+    redirect('/register');
+});
+
+/**
+ * LOGOUT
+ */
+$router->get('/logout', function () {
+    session_unset();
+    session_destroy();
+    redirect('/login');
+});
+
+/**
+ * APPLICATIONS – LIST + CREATE (GET)
+ */
+$router->get('/applications', function () {
+    $currentUser = current_user();
+    if ($currentUser === null) {
+        redirect('/login');
+    }
+
+    $controller = make_application_controller();
+    $view = new View();
+
+    $flashError = $_SESSION['flash_error'] ?? null;
+    unset($_SESSION['flash_error']);
+
+    $error = null;
+
+    $applications = $controller->list($currentUser);
+
+    $view->render('applications/list.php', [
+        'currentUser'  => $currentUser,
+        'flashError'   => $flashError,
+        'error'        => $error,
+        'applications' => $applications,
+    ]);
+});
+
+/**
+ * APPLICATIONS – CREATE (POST)
+ */
+$router->post('/applications', function () {
+    $currentUser = current_user();
+    if ($currentUser === null) {
+        redirect('/login');
+    }
+
+    $controller = make_application_controller();
+    $view = new View();
+
+    $token = $_POST['csrf_token'] ?? null;
+    if (!csrf_verify($token)) {
+        $error = 'Neteisingas saugumo žetonas. Perkraukite puslapį ir bandykite dar kartą.';
+    } else {
+        $error = $controller->create($currentUser, $_POST);
+    }
+
+    if ($error === null) {
+        redirect('/applications');
+    }
+
+    $flashError = $_SESSION['flash_error'] ?? null;
+    unset($_SESSION['flash_error']);
+
+    $applications = $controller->list($currentUser);
+
+    $view->render('applications/list.php', [
+        'currentUser'  => $currentUser,
+        'flashError'   => $flashError,
+        'error'        => $error,
+        'applications' => $applications,
+    ]);
+});
+
+/**
+ * APPLICATIONS – SUBMIT (student)
+ */
+$router->get('/applications/submit', function () {
+    $currentUser = current_user();
+    if ($currentUser === null) {
+        redirect('/login');
+    }
+
+    $id = (int)($_GET['id'] ?? 0);
+    if ($id <= 0) {
+        redirect('/applications');
+    }
+
+    $controller = make_application_controller();
+
+    $err = $controller->submit($currentUser, $id);
+    if ($err !== null) {
+        $_SESSION['flash_error'] = $err;
+    }
+
+    redirect('/applications');
+});
+
+/**
+ * APPLICATIONS – APPROVE (admin)
+ */
+$router->get('/applications/approve1', function () {
+    $currentUser = current_user();
+    if ($currentUser === null) {
+        redirect('/login');
+    }
+
+    $id = (int)($_GET['id'] ?? 0);
+    if ($id <= 0) {
+        redirect('/applications');
+    }
+
+    if ($currentUser['role'] !== 'admin') {
+        redirect('/applications');
+    }
+
+    $controller = make_application_controller();
+    $controller->approve($currentUser, $id);
+
+    redirect('/applications');
+});
+
+$router->get('/applications/approve', function () {
+    echo "<h1>DEBUG: /applications/approve route HIT</h1>";
+    echo "<p>GET id = " . htmlspecialchars($_GET['id'] ?? 'n/a', ENT_QUOTES, 'UTF-8') . "</p>";
     exit;
 });
 
+/**
+ * TODO vėliau:
+ *  - /applications/edit
+ *  - /applications/reject
+ *  - perkelti edit/reject view'us į routerį
+ */
 
 $router->dispatch($_SERVER['REQUEST_METHOD'], $_SERVER['REQUEST_URI']);

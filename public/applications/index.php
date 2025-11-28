@@ -12,31 +12,30 @@ initDatabase();
 initUsersTable();
 initApplicationsTable();
 
-$pdo = getPDO();
-$repository = new ApplicationRepository($pdo);
-$service = new ApplicationService($repository);
-$controller = new ApplicationController($service);
-$view = new View();
-
 if (!isset($_SESSION['user_id'])) {
     header('Location: /login.php');
     exit;
 }
 
 $currentUser = findUserById((int)$_SESSION['user_id']);
-
 if ($currentUser === null) {
     unset($_SESSION['user_id']);
     header('Location: /login.php');
     exit;
 }
 
+$pdo = getPDO();
+$repository = new ApplicationRepository($pdo);
+$service = new ApplicationService($repository);
+$controller = new ApplicationController($service);
+$view = new View();
+
 $flashError = $_SESSION['flash_error'] ?? null;
 unset($_SESSION['flash_error']);
 
 $error = null;
 
-// submit student (GET)
+// submit (student)
 if (
     isset($_GET['action'], $_GET['id']) &&
     $_GET['action'] === 'submit'
@@ -52,7 +51,7 @@ if (
     exit;
 }
 
-// approve admin (GET)
+// approve (admin)
 if (
     isset($_GET['action'], $_GET['id']) &&
     $_GET['action'] === 'approve'
@@ -65,7 +64,7 @@ if (
     exit;
 }
 
-// create new application (POST, student)
+// create new (student)
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $token = $_POST['csrf_token'] ?? null;
     if (!csrf_verify($token)) {

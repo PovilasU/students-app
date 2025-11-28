@@ -17,6 +17,7 @@ function lt_status_label(string $status): string {
     };
 }
 ?>
+
 <h1>Paraiškų sistema</h1>
 
 <p>
@@ -28,15 +29,15 @@ function lt_status_label(string $status): string {
 </p>
 
 <?php if (!empty($flashError)): ?>
-    <p style="color: red;"><?php echo htmlspecialchars($flashError, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8'); ?></p>
+    <p style="color:red;"><?php echo htmlspecialchars($flashError, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8'); ?></p>
+<?php endif; ?>
+
+<?php if (!empty($error)): ?>
+    <p style="color:red;"><?php echo htmlspecialchars($error, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8'); ?></p>
 <?php endif; ?>
 
 <?php if ($currentUser['role'] === 'student'): ?>
     <h2>Nauja paraiška</h2>
-
-    <?php if (!empty($error)): ?>
-        <p style="color: red;"><?php echo htmlspecialchars($error, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8'); ?></p>
-    <?php endif; ?>
 
     <form method="post" action="/applications/index.php">
         <input type="hidden" name="csrf_token" value="<?php echo csrf_token(); ?>">
