@@ -247,9 +247,9 @@ $applications = $applicationsStmt->fetchAll(PDO::FETCH_ASSOC);
                     <td><?php echo htmlspecialchars($app['created_at']); ?></td>
                     <td>
                         <?php if ($currentUser['role'] === 'student' && $app['status'] === 'draft'): ?>
-                            <a href="index.php?action=submit&id=<?php echo (int)$app['id']; ?>">
-                                Pateikti
-                            </a>
+                            <a href="edit_application.php?id=<?php echo (int)$app['id']; ?>">Redaguoti</a>
+                            |
+                            <a href="index.php?action=submit&id=<?php echo (int)$app['id']; ?>">Pateikti</a>
                         <?php elseif ($currentUser['role'] === 'admin' && $app['status'] === 'submitted'): ?>
                             <a href="index.php?action=approve&id=<?php echo (int)$app['id']; ?>">Patvirtinti</a>
                             |
@@ -258,6 +258,7 @@ $applications = $applicationsStmt->fetchAll(PDO::FETCH_ASSOC);
                             -
                         <?php endif; ?>
                     </td>
+
                 </tr>
             <?php endforeach; ?>
             </tbody>
