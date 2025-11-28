@@ -2,12 +2,16 @@
 session_start();
 
 require __DIR__ . '/../src/db.php';
+require __DIR__ . '/../src/ApplicationRepository.php';
+require __DIR__ . '/../src/ApplicationService.php';
 
 initDatabase();
 initUsersTable();
 initApplicationsTable();
 
 $pdo = getPDO();
+$repository = new ApplicationRepository($pdo);
+$service = new ApplicationService($repository);
 
 if (!isset($_SESSION['user_id'])) {
     header('Location: login.php');
@@ -27,15 +31,8 @@ if ($id <= 0) {
     exit;
 }
 
-$stmt = $pdo->prepare("
-    SELECT id, title, type, status, rejection_comment
-    FROM applications
-    WHERE id = :id
-");
-$stmt->execute([':id' => $id]);
-$application = $stmt->fetch(PDO::FETCH_ASSOC);
-
-if (!$application || $application['status'] !== 'submitted') {
+$application = $service->getSubmittedForRejection($id);
+if (!$application) {
     header('Location: index.php');
     exit;
 }
@@ -45,21 +42,9 @@ $error = null;
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $comment = trim($_POST['rejection_comment'] ?? '');
 
-    if ($comment === '') {
-        $error = 'Please enter rejection comment.';
-    } else {
-        $updateStmt = $pdo->prepare("
-            UPDATE applications
-            SET status = 'rejected',
-                rejection_comment = :comment
-            WHERE id = :id
-              AND status = 'submitted'
-        ");
-        $updateStmt->execute([
-            ':comment' => $comment,
-            ':id' => $application['id'],
-        ]);
+    $error = $service->rejectWithComment($application['id'], $comment);
 
+    if ($error === null) {
         header('Location: index.php');
         exit;
     }

@@ -1,13 +1,21 @@
 <?php
 session_start();
 
+// debug for dev
+ini_set('display_errors', '1');
+error_reporting(E_ALL);
+
 require __DIR__ . '/../src/db.php';
+require __DIR__ . '/../src/ApplicationRepository.php';
+require __DIR__ . '/../src/ApplicationService.php';
 
 initDatabase();
 initUsersTable();
 initApplicationsTable();
 
 $pdo = getPDO();
+$repository = new ApplicationRepository($pdo);
+$service = new ApplicationService($repository);
 
 if (!isset($_SESSION['user_id'])) {
     header('Location: login.php');
@@ -23,24 +31,14 @@ if ($currentUser === null || $currentUser['role'] !== 'student') {
 
 $id = (int)($_GET['id'] ?? 0);
 if ($id <= 0) {
-    header('Location: index.php');
+    echo 'Invalid application id.';
     exit;
 }
 
-$stmt = $pdo->prepare("
-    SELECT id, title, description, type, status
-    FROM applications
-    WHERE id = :id
-      AND student_id = :student_id
-");
-$stmt->execute([
-    ':id' => $id,
-    ':student_id' => $currentUser['id'],
-]);
-$application = $stmt->fetch(PDO::FETCH_ASSOC);
+$application = $service->getDraftForEditing($id, (int)$currentUser['id']);
 
-if (!$application || $application['status'] !== 'draft') {
-    header('Location: index.php');
+if (!$application) {
+    echo 'Application not found or not editable (must be your draft).';
     exit;
 }
 
@@ -51,27 +49,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $description = trim($_POST['description'] ?? '');
     $type = trim($_POST['type'] ?? '');
 
-    if ($title === '' || $description === '' || $type === '') {
-        $error = 'Please fill all fields.';
-    } else {
-        $updateStmt = $pdo->prepare("
-            UPDATE applications
-            SET title = :title,
-                description = :description,
-                type = :type
-            WHERE id = :id
-              AND student_id = :student_id
-              AND status = 'draft'
-        ");
+    $error = $service->updateDraftForStudent(
+        $application['id'],
+        (int)$currentUser['id'],
+        $title,
+        $description,
+        $type
+    );
 
-        $updateStmt->execute([
-            ':title' => $title,
-            ':description' => $description,
-            ':type' => $type,
-            ':id' => $application['id'],
-            ':student_id' => $currentUser['id'],
-        ]);
-
+    if ($error === null) {
         header('Location: index.php');
         exit;
     }

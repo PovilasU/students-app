@@ -35,9 +35,47 @@ class ApplicationService
         return null;
     }
 
+    public function getDraftForEditing(int $id, int $studentId): ?array
+    {
+        return $this->repository->findDraftForStudent($id, $studentId);
+    }
+
+    public function updateDraftForStudent(int $id, int $studentId, string $title, string $description, string $type): ?string
+    {
+        if ($title === '' || $description === '' || $type === '') {
+            return 'Please fill all fields.';
+        }
+
+        $ok = $this->repository->updateDraft($id, $studentId, $title, $description, $type);
+        if (!$ok) {
+            return 'Application not found or not editable.';
+        }
+
+        return null;
+    }
+
     public function approveSubmittedByAdmin(int $id): void
     {
         $this->repository->approveSubmitted($id);
+    }
+
+    public function getSubmittedForRejection(int $id): ?array
+    {
+        return $this->repository->findSubmittedById($id);
+    }
+
+    public function rejectWithComment(int $id, string $comment): ?string
+    {
+        if ($comment === '') {
+            return 'Please enter rejection comment.';
+        }
+
+        $ok = $this->repository->rejectSubmittedWithComment($id, $comment);
+        if (!$ok) {
+            return 'Application not found or not in submitted state.';
+        }
+
+        return null;
     }
 
     public function getApplicationsForUser(array $currentUser): array

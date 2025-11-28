@@ -74,6 +74,29 @@ class ApplicationRepository
         ]);
     }
 
+    public function updateDraft(int $id, int $studentId, string $title, string $description, string $type): bool
+    {
+        $stmt = $this->pdo->prepare("
+            UPDATE applications
+            SET title = :title,
+                description = :description,
+                type = :type
+            WHERE id = :id
+              AND student_id = :student_id
+              AND status = 'draft'
+        ");
+
+        $stmt->execute([
+            ':title' => $title,
+            ':description' => $description,
+            ':type' => $type,
+            ':id' => $id,
+            ':student_id' => $studentId,
+        ]);
+
+        return $stmt->rowCount() > 0;
+    }
+
     public function getStudentApplications(int $studentId): array
     {
         $stmt = $this->pdo->prepare("
@@ -109,5 +132,36 @@ class ApplicationRepository
         $stmt->execute([
             ':id' => $id,
         ]);
+    }
+
+    public function findSubmittedById(int $id): ?array
+    {
+        $stmt = $this->pdo->prepare("
+            SELECT id, student_id, title, description, type, status, created_at, rejection_comment
+            FROM applications
+            WHERE id = :id
+              AND status = 'submitted'
+        ");
+        $stmt->execute([':id' => $id]);
+
+        $row = $stmt->fetch(PDO::FETCH_ASSOC);
+        return $row ?: null;
+    }
+
+    public function rejectSubmittedWithComment(int $id, string $comment): bool
+    {
+        $stmt = $this->pdo->prepare("
+            UPDATE applications
+            SET status = 'rejected',
+                rejection_comment = :comment
+            WHERE id = :id
+              AND status = 'submitted'
+        ");
+        $stmt->execute([
+            ':comment' => $comment,
+            ':id' => $id,
+        ]);
+
+        return $stmt->rowCount() > 0;
     }
 }
