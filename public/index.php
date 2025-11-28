@@ -67,4 +67,65 @@ $router->post('/login', function () {
     exit;
 });
 
+// REGISTER (GET) - rodo registracijos formą
+$router->get('/register', function () {
+    require __DIR__ . '/../src/csrf.php';
+
+    $error = $_SESSION['register_error'] ?? null;
+    $success = $_SESSION['register_success'] ?? null;
+    unset($_SESSION['register_error'], $_SESSION['register_success']);
+
+    include __DIR__ . '/../views/auth/register.php';
+});
+
+// REGISTER (POST) - apdoroja registracijos formą
+$router->post('/register', function () {
+    require __DIR__ . '/../src/db.php';
+    require __DIR__ . '/../src/csrf.php';
+
+    $token = $_POST['csrf_token'] ?? null;
+    if (!csrf_verify($token)) {
+        $_SESSION['register_error'] = 'Neteisingas saugumo žetonas. Perkraukite puslapį ir bandykite dar kartą.';
+        header('Location: /register');
+        exit;
+    }
+
+    $name = trim($_POST['name'] ?? '');
+    $email = trim($_POST['email'] ?? '');
+    $password = $_POST['password'] ?? '';
+    $password2 = $_POST['password_confirm'] ?? '';
+
+    if ($name === '' || $email === '' || $password === '' || $password2 === '') {
+        $_SESSION['register_error'] = 'Visi laukai yra privalomi.';
+        header('Location: /register');
+        exit;
+    }
+
+    if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
+        $_SESSION['register_error'] = 'Neteisingas el. pašto formatas.';
+        header('Location: /register');
+        exit;
+    }
+
+    if ($password !== $password2) {
+        $_SESSION['register_error'] = 'Slaptažodžiai nesutampa.';
+        header('Location: /register');
+        exit;
+    }
+
+    $hash = password_hash($password, PASSWORD_DEFAULT);
+    $created = createUser($name, $email, $hash, 'student');
+
+    if (!$created) {
+        $_SESSION['register_error'] = 'Toks el. paštas jau egzistuoja.';
+        header('Location: /register');
+        exit;
+    }
+
+    $_SESSION['register_success'] = 'Registracija sėkminga. Dabar galite prisijungti.';
+    header('Location: /register');
+    exit;
+});
+
+
 $router->dispatch($_SERVER['REQUEST_METHOD'], $_SERVER['REQUEST_URI']);
